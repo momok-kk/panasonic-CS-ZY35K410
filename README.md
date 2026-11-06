@@ -1,9 +1,9 @@
-# Panasonic Smart China ZY Custom for Home Assistant
+# Panasonic CS-ZY35K410 for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-[![version](https://img.shields.io/badge/version-2.4.0-blue.svg)]()
+[![version](https://img.shields.io/badge/version-2.4.1-blue.svg)]()
 
-面向中国区「松下智能家电」App 的 Home Assistant 自定义集成，**仅适配 CS-ZY35K410**（洵风系列，2024 AirconCommon 新协议，设备类别 `0900`）；2.4.0 起不再兼容其它机型或设备类别。域名 `panasonic_smart_china_zy`，不与原版 `panasonic_smart_china` 冲突。
+面向中国区「松下智能家电」App 的 Home Assistant 自定义集成，集成显示名 **Panasonic CS-ZY35K410**，**仅适配 CS-ZY35K410**（洵风系列，2024 AirconCommon 新协议，设备类别 `0900`）；2.4.0 起不再兼容其它机型或设备类别。域名 `panasonic_smart_china_zy`，不与原版 `panasonic_smart_china` 冲突。
 
 ## 协议依据
 
@@ -56,8 +56,18 @@
 
 ## 安装
 
-HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Panasonic Smart China ZY Custom` → 下载 → 重启 HA。
+HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Panasonic CS-ZY35K410` → 下载 → 重启 HA。
 手动：复制 `custom_components/panasonic_smart_china_zy` 到 `/config/custom_components/`，重启后添加集成。
+
+集成在 HA 里的名称与图标由以下文件提供，全部为本地 PNG，不依赖在线资源：
+
+| 文件 | 用途 |
+|---|---|
+| `brand/icon.png`（512×512） | 「添加集成」列表与集成卡片的方图 |
+| `brand/logo.png`（1024×384） | 集成详情页顶部的横向 Logo |
+| `icon.png` / `logo.png`（根目录） | 兼容 2024.11 之前旧版 HA 的读取路径 |
+
+图标为 Panasonic 品牌蓝渐变底 + 白色壁挂机 + 三条送风曲线，浅色 / 深色主题下均可辨识。
 
 > 松下账号是**单点登录**。HA 登录后手机 App 会掉线；手机重新登录又会让 HA 会话失效。会话失效时集成会提示「重新登录松下账号」，重新输入密码即可，设备 ID 与已有实体 ID 不变。
 
@@ -203,6 +213,10 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 
 2.3.1 把「回风温度」sensor 与「滤网需更换」binary_sensor 设为**默认禁用**（35 个定义 / 33 个默认可见），两者均为只读且在本机型上无有效数据；不删除定义、不改动 `unique_id`，可随时在 HA 中重新启用。已有安装需手动在实体注册表禁用这两条。
 
-2.4.0 收敛为单型号专用：删除 CZ-RD501DW2 profile / 旧协议写入 / 型号下拉 / 全屋设备列表端点（`device_count` 属性随之移除）。**配置流程仍完整**（登录 → 设备发现与选择 → token → reauth），所有 `unique_id` / `entity_id` 不变，升级后无需重新配置；旧条目里的 `controller_model` 键被忽略。
+2.4.0 收敛为单型号专用：删除 CZ-RD501DW2 profile / 旧协议写入 / 型号下拉 / 全屋设备列表端点（`device_count` 属性随之移除）。**配置流程仍完整**（登录 → 设备发现与选择 → token → reauth），保留注册表升级时所有 `unique_id` / `entity_id` 不变，无需重新配置；旧条目里的 `controller_model` 键被忽略。
+
+2.4.1 集成显示名改为 `Panasonic CS-ZY35K410`（manifest `name`），并补齐品牌图标：`brand/icon.png`、`brand/logo.png` 及根目录同名文件。**只影响集成在 UI 中的名称与图标**，设备名、`unique_id`、`entity_id` 与实体状态均不变。
+
+> 关于 `entity_id`：2.4.0 说的「不变」适用于保留实体注册表的升级；若清空注册表做全新安装，HA 会按当前中文实体名重新生成 ID（如 `switch.wo_shi_kong_diao_dian_yuan`），`unique_id` 与实体功能不受影响。
 
 建议升级前备份 `/config/custom_components/panasonic_smart_china_zy`。本仓库保留了 `backup/v1.1.0` 分支与 `backup-v1.1.0-before-completion` 标签，可随时回滚。

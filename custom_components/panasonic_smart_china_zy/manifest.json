@@ -1,12 +1,12 @@
 {
   "domain": "panasonic_smart_china_zy",
-  "name": "Panasonic Smart China ZY Custom",
+  "name": "Panasonic CS-ZY35K410",
   "documentation": "https://github.com/zz23/panasonic_smart_china_ac",
   "issue_tracker": "https://github.com/zz23/panasonic_smart_china_ac/issues",
   "dependencies": [],
   "codeowners": [],
   "requirements": [],
-  "version": "2.4.0",
+  "version": "2.4.1",
   "iot_class": "cloud_polling",
   "config_flow": true
 }

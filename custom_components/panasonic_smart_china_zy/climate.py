@@ -19,7 +19,14 @@ from homeassistant.const import (
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import PanasonicApiError
-from .const import CONF_SENSOR_ID, DOMAIN, FAN_MUTE, NO_EXTERNAL_SENSOR
+from .const import (
+    CONF_SENSOR_ID,
+    DOMAIN,
+    FAN_MUTE,
+    MODE_COLOR_OFF,
+    NO_EXTERNAL_SENSOR,
+    RUN_MODE_COLORS,
+)
 from .helpers import device_info
 
 _LOGGER = logging.getLogger(__name__)
@@ -160,6 +167,27 @@ class PanasonicACEntity(CoordinatorEntity, ClimateEntity):
             except ValueError:
                 pass
         return self._current_temperature
+
+    @property
+    def extra_state_attributes(self):
+        """Expose the official App's run-mode colour so HA cards can match it."""
+        res = self.coordinator.data or {}
+        raw = res.get("runMode")
+        try:
+            raw = int(raw)
+        except (TypeError, ValueError):
+            raw = None
+        color, color_name, label = RUN_MODE_COLORS.get(
+            raw, (MODE_COLOR_OFF, "灰色", "待机")
+        )
+        if not self._is_on:
+            color, color_name, label = MODE_COLOR_OFF, "灰色", "待机"
+        return {
+            "mode_color": color,
+            "mode_color_name": color_name,
+            "mode_label": label,
+            "run_mode_raw": raw,
+        }
 
     @property
     def target_temperature(self):

@@ -194,6 +194,35 @@ ERROR_TEXT = {
     "07DF": "碰撞开关不工作，请确认",
 }
 
+# Official AirconCommon RUN_MODE_COLOR table from the web app.  These are UI
+# colours derived from runMode, NOT values reported by the device.  Exposed as
+# climate attributes so HA cards can tint themselves like the official App.
+MODE_COLOR_OFF = "#DDD"
+RUN_MODE_COLORS = {
+    65: ("#DDD", "灰色", "自动"),
+    66: ("#4097DC", "蓝色", "制冷"),
+    67: ("#FF9E18", "橙色", "制暖"),
+    68: ("#00C101", "绿色", "抽湿"),
+    69: ("#7056DC", "紫色", "送风"),
+}
+
+# Full "MorePage" feature list of the official AirconCommon web app.
+# Kept as documentation for the follow-up pass; each feature is gated by the
+# matching "*Ex" capability flag in commonStatus.  Values still need to be
+# confirmed against a live status bean before being turned into entities.
+MOREPAGE_FEATURES = [
+    "nanoeX", "cool", "highCool", "highWarm", "dehumid", "outDehumid",
+    "sleep", "easySleep", "led", "elecHeat", "dry", "voiceSet",
+    "spaceClean", "cleanSet", "lamp", "o2Set", "uvc", "rd",
+    "aidSleep", "aidSleepRes",
+]
+MOREPAGE_CAPABILITIES = [
+    "nanoeEx", "coolEx", "highCoolEx", "highWarmEx", "dehumidEx",
+    "outDehumidEx", "sleepEx", "easySleepEx", "lightEx", "elecHeatEx",
+    "dryEx", "voiceSetEx", "cleanSetEx", "lampEx", "o2SetEx", "uvcEx",
+    "aidSleepEx",
+]
+
 SUPPORTED_CONTROLLERS = {
     "CZ-RD501DW2": {
         "name": "Panasonic ducted controller CZ-RD501DW2",

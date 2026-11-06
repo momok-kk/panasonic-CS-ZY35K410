@@ -267,11 +267,8 @@ BINARY_SENSORS = [
         "key": "filter_due", "name": "滤网需更换", "field": "filterReset",
         "equals": 1,
     },
-    {
-        "key": "fresh_air_running", "name": "新风运行", "field": "ervMode",
-        "equals": 66, "erv_running": True,
-        "device_class": BinarySensorDeviceClass.RUNNING,
-    },
+    # "fresh_air_running" deliberately removed: live ervType=0 means this
+    # CS-ZY35K410 has no fresh-air module at all.
 ]
 
 # Known alarm codes reported by the cloud (official web app).
@@ -444,14 +441,10 @@ SUPPORTED_CONTROLLERS = {
                 "key": "spaceClean", "capability": "spaceCleanEx",
                 "name": "空间净化", "on": 1, "off": 0,
             },
-            {
-                "key": "uvc", "capability": "uvcEx", "name": "UVC 除菌",
-                "on": 1, "off": 0,
-            },
-            {
-                "key": "voiceSet", "capability": "voiceSetEx",
-                "name": "语音提示", "on": 1, "off": 0,
-            },
+            # uvc / voiceSet deliberately removed: the live status bean of
+            # this CS-ZY35K410 reports uvcEx=0 and voiceSetEx=0, and neither
+            # "uvc" nor "voiceSet" field is present.  spaceClean IS supported
+            # (spaceCleanEx=1) and stays.
             # buzzer is intentionally absent: the App sends a fixed
             # buzzer=65 on every command (COMMAND_BUZZER), it is not a toggle.
         ],

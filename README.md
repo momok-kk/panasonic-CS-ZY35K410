@@ -1,7 +1,7 @@
 # Panasonic Smart China ZY Custom for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-[![version](https://img.shields.io/badge/version-2.2.0-blue.svg)]()
+[![version](https://img.shields.io/badge/version-2.2.1-blue.svg)]()
 
 面向中国区「松下智能家电」App 的 Home Assistant 自定义集成，重点适配 **CS-ZY35K410**（洵风系列，2024 AirconCommon 新协议）。域名 `panasonic_smart_china_zy`，不与原版 `panasonic_smart_china` 冲突。
 
@@ -24,19 +24,21 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 
 > 松下账号是**单点登录**。HA 登录后手机 App 会掉线；手机重新登录又会让 HA 会话失效。会话失效时集成会提示「重新登录松下账号」，重新输入密码即可，设备 ID 与已有实体 ID 不变。
 
-## 实体清单（合计 36 个）
+## 实体清单（合计 33 个）
 
 | 平台 | 实体 | 状态字段 / 端点 | 门控 |
 |---|---|---|---|
 | climate ×1 | 空调 | `runStatus` / `runMode` / `setTemperature` / `windSet` / `portraitWindSet` / `orientationWindSet` | — |
-| switch ×12 | 电源、强劲运转、自清洁、柔湿制冷、辅热、纳诺怡、睡眠、显示灯、空间净化、UVC 除菌、语音提示、**定时开关** | `highCool` / `cleanSet` / `cool` / `elecHeat` / `nanoe` / `lamp` / `spaceClean` / `uvc` / `voiceSet` / `fixTimeStatus` | `*Ex` 能力位 |
+| switch ×10 | 电源、强劲运转、自清洁、柔湿制冷、辅热、纳诺怡、睡眠、显示灯、空间净化、**定时开关** | `highCool` / `cleanSet` / `cool` / `elecHeat` / `nanoe` / `lamp` / `spaceClean` / `fixTimeStatus` | `*Ex` 能力位 |
 | select ×3 | 场景、上下扫风位置、左右扫风位置 | `scene` / `portraitWindSet` / `orientationWindSet` | 左右扫风由 `leftType` 门控 |
 | button ×2 | 电源切换、滤网复位 | `runStatus` / `filterReset` | — |
 | sensor ×14 | 回风温度、故障码、今日用电量/时长/费用、本月用电量/时长/费用、本年用电量/费用、制冷/制暖/抽湿记忆温度、**定时计划** | 状态 bean + `ACGetElectricChargeTodayInfo` / `ACGetElectricChargeDaylyInfo` / `ACGetAirconYearGraphInfo` / `ACGetModeTempInfo` / `ACGetAirconTimerNewProtocol` | — |
-| binary_sensor ×3 | 故障、滤网需更换、新风运行 | `alarmCode` / `filterReset` / `ervMode` | — |
+| binary_sensor ×2 | 故障、滤网需更换 | `alarmCode` / `filterReset` | — |
 | number ×1 | **电价**（元/kWh，可写） | `ACGetAirconElectricChargeInfo` / `ACSetAirconElectricChargeInfo` | — |
 
-能力位为 0 或状态里不存在该字段时，实体显示为「不可用」，这是硬件不支持的正常表现，可在 HA 里手动禁用或删除。本机实机能力位为 1 的是 `nanoeEx / coolEx / highCoolEx / highWarmEx / sleepEx / cleanSetEx / lampEx / spaceCleanEx / elecHeatEx`。
+剩余实体仍由 `*Ex` 能力位门控；能力位为 0 或状态字段缺失时会显示为「不可用」，这是硬件不支持的正常表现。本机 `spaceCleanEx=1`，**空间净化是真实支持的功能**（`spaceClean=0` 表示当前关闭），不要误删。
+
+2.2.1 已从本机型 profile 中移除 3 个实机确认不支持的实体：`UVC 除菌`（`uvcEx=0`、状态无 `uvc` 字段）、`语音提示`（`voiceSetEx=0`、状态无 `voiceSet` 字段）、`新风运行`（`ervType=0`，无新风模块）。这三者在 HA 里会变成孤儿实体，需一并删除。
 
 ### climate 可用值
 
@@ -92,7 +94,7 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 | 项目 | 状态 |
 |---|---|
 | 定时开关机 | **2.2.0 已接入**：总开关可写、每周计划只读展示；定时条目的增删改未提供（避免误写覆盖 App 计划） |
-| 新风独立 fan 实体 | 本机 `ervType=0`（无新风模块），仅保留「新风运行」二值传感器 |
+| 新风独立 fan 实体 | 本机 `ervType=0`（无新风模块），2.2.1 起不再注册「新风运行」实体 |
 | `highWarm` / `nanoeX` 独立开关 | **刻意不做**：官方用同一 `highCool` 按制冷/制热派生「强智冷/强智暖」；`nanoeX` 与 `nanoe` / `o2Set` / `runMode` 是联动状态机，单独写会破坏联动 |
 | 单点登录 | 无法规避，需通过重新认证刷新 SSID |
 | 云端自签名证书 | 请求使用 `ssl=False`；如 HA 环境限制，请检查网络策略 |
@@ -104,5 +106,7 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 2.1.0 移除了 6 个在官方协议与实机状态中均不存在的历史实体（`displaySet` / `sleepMode` / `powerfulMode` / `cleanMode` 四个 select、`buzzer` switch、`selfcleanReset` button），它们在 HA 里会变成孤儿实体，可在「实体」页面删除。新增的电价、本年费用、模式记忆温度会自动出现。
 
 2.2.0 新增「定时开关」switch 与「定时计划」sensor，复用现有 60s 辅助轮询，不增加云端请求频率；升级后自动出现，无需重新配置。
+
+2.2.1 清理：移除 UVC 除菌、语音提示、新风运行 3 个本机型不支持的实体定义（36→33），并在 HA 中删除 13 个 1.1.0 / 2.1.0 遗留孤儿实体，共清理 16 条注册表记录。删除前会备份 `/config/.storage/core.entity_registry`；若需恢复，改回代码重启后实体会重新注册（entity_id 可能变化）。
 
 建议升级前备份 `/config/custom_components/panasonic_smart_china_zy`。本仓库保留了 `backup/v1.1.0` 分支与 `backup-v1.1.0-before-completion` 标签，可随时回滚。

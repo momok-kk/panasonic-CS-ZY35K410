@@ -28,6 +28,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
         PanasonicRemoteSwitch(coordinator, device, entry, description)
         for description in device.profile.get("remote_switches", [])
     ]
+    timer_description = device.profile.get("timer_switch")
+    if timer_description and runtime.get("aux"):
+        entities.append(
+            PanasonicTimerSwitch(runtime["aux"], device, entry, timer_description)
+        )
     async_add_entities(entities)
 
 
@@ -80,3 +85,58 @@ class PanasonicRemoteSwitch(CoordinatorEntity, SwitchEntity):
 
     async def async_turn_off(self, **kwargs):
         await self._set(self._off_value)
+
+
+class PanasonicTimerSwitch(CoordinatorEntity, SwitchEntity):
+    """Master enable/disable for the weekly timer (its own cloud endpoint)."""
+
+    _attr_device_class = SwitchDeviceClass.SWITCH
+
+    def __init__(self, coordinator, device, entry, description):
+        super().__init__(coordinator)
+        self._device = device
+        self._description = description
+        self._attr_name = f"{entry.title} {description['name']}"
+        self._attr_unique_id = (
+            f"panasonic_{device.device_id}_{description['key']}_switch"
+        )
+        self._attr_device_info = device_info(device, entry.title)
+
+    @property
+    def _status(self):
+        section = (self.coordinator.data or {}).get(self._description["source"])
+        return section if isinstance(section, dict) else {}
+
+    @property
+    def available(self):
+        return (
+            self.coordinator.last_update_success
+            and self._description["field"] in self._status
+        )
+
+    @property
+    def is_on(self):
+        return (
+            as_int(self._status.get(self._description["field"]))
+            == self._description["on"]
+        )
+
+    async def _set(self, value):
+        try:
+            await self._device.set_fix_time_status(
+                value == self._description["on"]
+            )
+        except PanasonicApiError as err:
+            _LOGGER.error("Timer switch command failed: %s", err)
+            return
+        data = dict(self.coordinator.data or {})
+        section = dict(data.get(self._description["source"]) or {})
+        section[self._description["field"]] = value
+        data[self._description["source"]] = section
+        self.coordinator.async_set_updated_data(data)
+
+    async def async_turn_on(self, **kwargs):
+        await self._set(self._description["on"])
+
+    async def async_turn_off(self, **kwargs):
+        await self._set(self._description["off"])

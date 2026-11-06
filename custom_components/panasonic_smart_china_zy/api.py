@@ -22,7 +22,10 @@ from .const import (
     ENDPOINT_ELEC_MONTH,
     ENDPOINT_ELEC_TODAY,
     ENDPOINT_ELEC_YEAR,
+    ENDPOINT_FIX_STATUS_GET,
+    ENDPOINT_FIX_STATUS_SET,
     ENDPOINT_MODE_TEMP,
+    ENDPOINT_TIMER_GET,
     SAFE_KEYS,
     SUCCESS_ERROR_CODES,
     SUPPORTED_CONTROLLERS,
@@ -46,6 +49,8 @@ AUX_ENDPOINTS = {
     ),
     "electricity_charge": (ENDPOINT_CHARGE_GET, None),
     "mode_temp": (ENDPOINT_MODE_TEMP, None),
+    "timer": (ENDPOINT_TIMER_GET, None),
+    "timer_status": (ENDPOINT_FIX_STATUS_GET, None),
 }
 # Live responses (2026-11-06):
 #   today  -> {powerToday, costToday, durationToday}
@@ -53,6 +58,8 @@ AUX_ENDPOINTS = {
 #   year   -> {power[12], cost[12], setTemperature[12], outsideTemperature[12]}
 #   charge -> {charge: 0.6}
 #   mode_temp -> {coldModeTemp, warmModeTemp, wetModeTemp, *ModeWind}
+#   timer  -> {weekList: [{week: 1..7, timerList: [timer, ...]}]}
+#   timer_status -> {fixTimeStatus: 0 | 1}
 
 
 class PanasonicApiError(Exception):
@@ -258,6 +265,22 @@ class PanasonicSmartDevice:
             "params": {"charge": round(float(value), 2)},
         }
         return await self._post(f"{URL_BASE}/{ENDPOINT_CHARGE_SET}", payload)
+
+    async def set_fix_time_status(self, enabled):
+        """Enable or disable the device's weekly timer feature.
+
+        The official App posts {"params": {"fixTimeStatus": 1}}; a flat
+        payload is rejected by the cloud with error 4099.  Verified by
+        writing back the unchanged value on a live device.
+        """
+        payload = {
+            "id": 200,
+            "usrId": self.usr_id,
+            "deviceId": self.device_id,
+            "token": self.token,
+            "params": {"fixTimeStatus": 1 if enabled else 0},
+        }
+        return await self._post(f"{URL_BASE}/{ENDPOINT_FIX_STATUS_SET}", payload)
 
     async def send_command(self, changes):
         """Read-modify-write against the freshest status, then push the update.

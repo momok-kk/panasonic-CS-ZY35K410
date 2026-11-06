@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 import logging
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, ERROR_TEXT
+from .const import (
+    DOMAIN,
+    ERROR_TEXT,
+    TIMER_ACTIONS,
+    TIMER_RUN_MODES,
+    TIMER_WEEK_NAMES,
+)
 from .helpers import as_int, device_info, sum_array
 
 _LOGGER = logging.getLogger(__name__)
@@ -30,6 +37,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
             PanasonicAuxSensor(aux, device, entry, description)
             for description in device.profile.get("aux_sensors", [])
         )
+        timer_description = device.profile.get("timer_sensor")
+        if timer_description:
+            entities.append(
+                PanasonicTimerSensor(aux, device, entry, timer_description)
+            )
     async_add_entities(entities)
 
 
@@ -116,3 +128,103 @@ class PanasonicAuxSensor(_BaseSensor):
             return float(raw)
         except (TypeError, ValueError):
             return None
+
+
+class PanasonicTimerSensor(_BaseSensor):
+    """Read-only view of the device's weekly timer schedule.
+
+    State is the number of configured timer entries; the parsed schedule and
+    the next upcoming entry are exposed as attributes.  Editing the schedule
+    itself is intentionally not offered: ACSetAirconTimerNewProtocol prunes
+    fields per capability flag and a malformed write would silently overwrite
+    the schedule configured in the official App.
+    """
+
+    _attr_icon = "mdi:calendar-clock"
+
+    def _parse(self):
+        timer = (self.coordinator.data or {}).get(self._description["source"])
+        if not isinstance(timer, dict):
+            return None
+        week_list = timer.get("weekList")
+        if not isinstance(week_list, list):
+            return None
+
+        items = []
+        for index, day in enumerate(week_list):
+            if not isinstance(day, dict):
+                continue
+            week_label = (
+                TIMER_WEEK_NAMES[index]
+                if index < len(TIMER_WEEK_NAMES)
+                else str(day.get("week", index + 1))
+            )
+            for raw in day.get("timerList") or []:
+                if not isinstance(raw, dict):
+                    continue
+                minutes = as_int(raw.get("startTime"))
+                if minutes is None or minutes < 0:
+                    continue
+                items.append({
+                    "week": day.get("week", index + 1),
+                    "week_label": week_label,
+                    "week_index": index,
+                    "time": f"{minutes // 60:02d}:{minutes % 60:02d}",
+                    "minute_of_day": minutes,
+                    "action": TIMER_ACTIONS.get(
+                        as_int(raw.get("runStatus")), "未知"
+                    ),
+                    "mode": TIMER_RUN_MODES.get(
+                        as_int(raw.get("runMode")), "未知"
+                    ),
+                    "temperature": as_int(raw.get("setTemperature")),
+                    "nanoe": bool(as_int(raw.get("nanoe"))),
+                    "wind_set": as_int(raw.get("windSet")),
+                })
+        items.sort(key=lambda item: (item["week_index"], item["minute_of_day"]))
+        return items
+
+    @property
+    def available(self):
+        return self.coordinator.last_update_success and self._parse() is not None
+
+    @property
+    def native_value(self):
+        items = self._parse()
+        return len(items) if items is not None else None
+
+    @property
+    def extra_state_attributes(self):
+        items = self._parse()
+        if items is None:
+            return None
+        data = self.coordinator.data or {}
+        status = data.get("timer_status")
+        enabled = (
+            as_int(status.get("fixTimeStatus")) == 1
+            if isinstance(status, dict)
+            else False
+        )
+
+        now = datetime.now()
+        today = now.weekday()
+        now_minutes = now.hour * 60 + now.minute
+        next_item = None
+        for offset in range(8):
+            week_index = (today + offset) % 7
+            for item in items:
+                if item["week_index"] != week_index:
+                    continue
+                if offset == 0 and item["minute_of_day"] <= now_minutes:
+                    continue
+                next_item = dict(item)
+                next_item["days_ahead"] = offset
+                break
+            if next_item:
+                break
+
+        return {
+            "enabled": enabled,
+            "schedule": items,
+            "next_timer": next_item,
+        }

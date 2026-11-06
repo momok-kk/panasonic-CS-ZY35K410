@@ -44,6 +44,12 @@ ENDPOINT_MODE_TEMP = "ACGetModeTempInfo"
 ENDPOINT_CHARGE_GET = "ACGetAirconElectricChargeInfo"
 ENDPOINT_CHARGE_SET = "ACSetAirconElectricChargeInfo"
 
+# Weekly timer ("fix time") endpoints from the official AirconCommon web app.
+ENDPOINT_TIMER_GET = "ACGetAirconTimerNewProtocol"
+ENDPOINT_TIMER_SET = "ACSetAirconTimerNewProtocol"
+ENDPOINT_FIX_STATUS_GET = "ACGetAirconFixTimeStatusInfo"
+ENDPOINT_FIX_STATUS_SET = "ACSetAirconFixTimeStatusInfo"
+
 # The official web app sends buzzer=65 with EVERY command (BUZZER:{ON:65}).
 # It is a "beep on this command" marker, not a persistent toggle; the status
 # bean merely echoes a sticky value.  Do not expose it as a switch.
@@ -219,6 +225,37 @@ CHARGE_NUMBER = {
     "min": 0.0,
     "max": 5.0,
     "step": 0.01,
+}
+
+# Weekly timer, verified against a live CS-ZY35K410 (2026-11-06).
+#   ACGetAirconTimerNewProtocol -> {"weekList": [{"week": 1..7,
+#       "timerList": [{startTime, runStatus, runMode, setTemperature,
+#                      windSet, portraitWindSet, orientationWindSet, nanoe}]}]}
+#   startTime = 60 * hour + minute (official formatHM / getDiffTimeset).
+#   ACGetAirconFixTimeStatusInfo -> {"fixTimeStatus": 0 | 1}; the official
+#   TimingSettingPage onShow treats 1 as enabled and anything else as off.
+# The timer lists themselves are deliberately READ-ONLY here: editing them
+# requires ACSetAirconTimerNewProtocol with per-capability field pruning, and
+# a wrong write would silently change the user's App schedule.
+TIMER_WEEK_NAMES = ("周一", "周二", "周三", "周四", "周五", "周六", "周日")
+TIMER_RUN_MODES = {
+    65: "自动", 66: "制冷", 67: "制暖", 68: "抽湿", 69: "送风",
+}
+TIMER_ACTIONS = {48: "开机", 49: "关机"}
+
+TIMER_SWITCH = {
+    "key": "fix_time_status",
+    "name": "定时开关",
+    "source": "timer_status",
+    "field": "fixTimeStatus",
+    "on": 1,
+    "off": 0,
+}
+
+TIMER_SENSOR = {
+    "key": "timer_schedule",
+    "name": "定时计划",
+    "source": "timer",
 }
 
 BINARY_SENSORS = [
@@ -450,5 +487,7 @@ SUPPORTED_CONTROLLERS = {
         "aux_sensors": AUX_SENSORS,
         "binary_sensors": BINARY_SENSORS,
         "charge_number": CHARGE_NUMBER,
+        "timer_switch": TIMER_SWITCH,
+        "timer_sensor": TIMER_SENSOR,
     },
 }

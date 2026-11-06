@@ -1,7 +1,7 @@
 # Panasonic Smart China ZY Custom for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-[![version](https://img.shields.io/badge/version-2.1.0-blue.svg)]()
+[![version](https://img.shields.io/badge/version-2.2.0-blue.svg)]()
 
 面向中国区「松下智能家电」App 的 Home Assistant 自定义集成，重点适配 **CS-ZY35K410**（洵风系列，2024 AirconCommon 新协议）。域名 `panasonic_smart_china_zy`，不与原版 `panasonic_smart_china` 冲突。
 
@@ -24,15 +24,15 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 
 > 松下账号是**单点登录**。HA 登录后手机 App 会掉线；手机重新登录又会让 HA 会话失效。会话失效时集成会提示「重新登录松下账号」，重新输入密码即可，设备 ID 与已有实体 ID 不变。
 
-## 实体清单（合计 34 个）
+## 实体清单（合计 36 个）
 
 | 平台 | 实体 | 状态字段 / 端点 | 门控 |
 |---|---|---|---|
 | climate ×1 | 空调 | `runStatus` / `runMode` / `setTemperature` / `windSet` / `portraitWindSet` / `orientationWindSet` | — |
-| switch ×11 | 电源、强劲运转、自清洁、柔湿制冷、辅热、纳诺怡、睡眠、显示灯、空间净化、UVC 除菌、语音提示 | `highCool` / `cleanSet` / `cool` / `elecHeat` / `nanoe` / `lamp` / `spaceClean` / `uvc` / `voiceSet` | `*Ex` 能力位 |
+| switch ×12 | 电源、强劲运转、自清洁、柔湿制冷、辅热、纳诺怡、睡眠、显示灯、空间净化、UVC 除菌、语音提示、**定时开关** | `highCool` / `cleanSet` / `cool` / `elecHeat` / `nanoe` / `lamp` / `spaceClean` / `uvc` / `voiceSet` / `fixTimeStatus` | `*Ex` 能力位 |
 | select ×3 | 场景、上下扫风位置、左右扫风位置 | `scene` / `portraitWindSet` / `orientationWindSet` | 左右扫风由 `leftType` 门控 |
 | button ×2 | 电源切换、滤网复位 | `runStatus` / `filterReset` | — |
-| sensor ×13 | 回风温度、故障码、今日用电量/时长/费用、本月用电量/时长/费用、本年用电量/费用、制冷/制暖/抽湿记忆温度 | 状态 bean + `ACGetElectricChargeTodayInfo` / `ACGetElectricChargeDaylyInfo` / `ACGetAirconYearGraphInfo` / `ACGetModeTempInfo` | — |
+| sensor ×14 | 回风温度、故障码、今日用电量/时长/费用、本月用电量/时长/费用、本年用电量/费用、制冷/制暖/抽湿记忆温度、**定时计划** | 状态 bean + `ACGetElectricChargeTodayInfo` / `ACGetElectricChargeDaylyInfo` / `ACGetAirconYearGraphInfo` / `ACGetModeTempInfo` / `ACGetAirconTimerNewProtocol` | — |
 | binary_sensor ×3 | 故障、滤网需更换、新风运行 | `alarmCode` / `filterReset` / `ervMode` | — |
 | number ×1 | **电价**（元/kWh，可写） | `ACGetAirconElectricChargeInfo` / `ACSetAirconElectricChargeInfo` | — |
 
@@ -61,6 +61,24 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 {{ state_attr('climate.<你的空调实体>', 'mode_color') }}
 ```
 
+### 定时（2.2.0 新增）
+
+协议取自官方 `TimingSettingPage` / `ParmSetPage`，并已用实机响应（2026-11-06）核对：
+
+| 端点 | 用途 |
+|---|---|
+| `ACGetAirconTimerNewProtocol` | 返回 `weekList`（周一~周日），每天一个 `timerList` |
+| `ACGetAirconFixTimeStatusInfo` | 返回 `fixTimeStatus`：**1=启用 / 0=停用** |
+| `ACSetAirconFixTimeStatusInfo` | 写入 `params: {fixTimeStatus: 1}`；扁平格式会返回 `4099 缺少请求参数` |
+| `ACSetAirconTimerNewProtocol` | 修改定时条目（本集成**不调用**） |
+
+`startTime = 60×小时 + 分钟`（180=03:00、503=08:23）；`runStatus` 48=开机 / 49=关机；`runMode` 65–69 与 climate 一致。
+
+- `switch.…定时开关`：唯一可写的定时实体，等同 App 定时页的总开关。
+- `sensor.…定时计划`：state 为已配置的定时条数，属性含 `enabled`、`schedule`（星期 / 时间 / 动作 / 模式 / 温度 / 纳诺怡）、`next_timer`（下一次将执行，含 `days_ahead`）。
+
+> 定时条目本身**只读**。`ACSetAirconTimerNewProtocol` 会按 `*Ex` 能力位裁剪字段，误写会静默覆盖 App 里配好的计划，因此不提供增删改；要改计划请仍在 App 里操作。
+
 ## 架构
 
 - **单设备单轮询**：所有实体共享一个 `PanasonicStatusCoordinator`（15s）与一个 `PanasonicAuxCoordinator`（60s），不再每个实体各发一次云端请求。
@@ -73,7 +91,7 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 
 | 项目 | 状态 |
 |---|---|
-| 定时开关机 | 已定位 `ACGet/SetAirconTimerNewProtocol` 端点，但缺少实机返回样例，未实现，避免臆造字段 |
+| 定时开关机 | **2.2.0 已接入**：总开关可写、每周计划只读展示；定时条目的增删改未提供（避免误写覆盖 App 计划） |
 | 新风独立 fan 实体 | 本机 `ervType=0`（无新风模块），仅保留「新风运行」二值传感器 |
 | `highWarm` / `nanoeX` 独立开关 | **刻意不做**：官方用同一 `highCool` 按制冷/制热派生「强智冷/强智暖」；`nanoeX` 与 `nanoe` / `o2Set` / `runMode` 是联动状态机，单独写会破坏联动 |
 | 单点登录 | 无法规避，需通过重新认证刷新 SSID |
@@ -84,5 +102,7 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 从 1.1.0 / 1.2.1 升级到 2.x 时，**域名、设备 ID、全部 unique_id 均保持不变**，现有自动化与仪表盘无需改动。
 
 2.1.0 移除了 6 个在官方协议与实机状态中均不存在的历史实体（`displaySet` / `sleepMode` / `powerfulMode` / `cleanMode` 四个 select、`buzzer` switch、`selfcleanReset` button），它们在 HA 里会变成孤儿实体，可在「实体」页面删除。新增的电价、本年费用、模式记忆温度会自动出现。
+
+2.2.0 新增「定时开关」switch 与「定时计划」sensor，复用现有 60s 辅助轮询，不增加云端请求频率；升级后自动出现，无需重新配置。
 
 建议升级前备份 `/config/custom_components/panasonic_smart_china_zy`。本仓库保留了 `backup/v1.1.0` 分支与 `backup-v1.1.0-before-completion` 标签，可随时回滚。

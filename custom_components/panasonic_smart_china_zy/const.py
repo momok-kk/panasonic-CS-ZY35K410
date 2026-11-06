@@ -41,6 +41,13 @@ ENDPOINT_ELEC_TODAY = "ACGetElectricChargeTodayInfo"
 ENDPOINT_ELEC_MONTH = "ACGetElectricChargeDaylyInfo"
 ENDPOINT_ELEC_YEAR = "ACGetAirconYearGraphInfo"
 ENDPOINT_MODE_TEMP = "ACGetModeTempInfo"
+ENDPOINT_CHARGE_GET = "ACGetAirconElectricChargeInfo"
+ENDPOINT_CHARGE_SET = "ACSetAirconElectricChargeInfo"
+
+# The official web app sends buzzer=65 with EVERY command (BUZZER:{ON:65}).
+# It is a "beep on this command" marker, not a persistent toggle; the status
+# bean merely echoes a sticky value.  Do not expose it as a switch.
+COMMAND_BUZZER = 65
 
 # Business error codes that mean "session expired / re-authenticate".
 # Note: the cloud returns either a top-level errorCode or a nested
@@ -90,14 +97,17 @@ LEGACY_SAFE_KEYS = [
 # Backwards-compatible name; api.py now uses the per-profile "safe_keys".
 SAFE_KEYS = LEGACY_SAFE_KEYS
 
-# Exactly the PARAMS bean the AirconCommon web app posts to
-# ACDevSetStatusNewProtocol.  Capability-only fields and read-only values are
-# deliberately excluded so read-modify-write never echoes them back.
+# Verified against a live CS-ZY35K410 status bean (2026-11-06):
+# the 11 official PARAMS keys plus the capability-gated feature switches that
+# are actually present in the status bean.  Capability flags (*Ex), read-only
+# diagnostics (alarmCode, inhaleTemperature, airVersion, e017f, *Type) and
+# one-shot commands (filterReset) are deliberately excluded from the echo.
 AIRCONCOMMON_SAFE_KEYS = [
     "buzzer", "runStatus", "setTemperature", "runMode", "windSet",
     "portraitWindSet", "orientationWindSet", "cleanSet", "ervWind",
     "ervMode", "scene", "cool", "highCool", "elecHeat", "lamp", "uvc",
-    "voiceSet", "spaceClean",
+    "voiceSet", "spaceClean", "nanoe", "nanoeX", "sleep", "outDehumid",
+    "preAirconMode", "o2Set",
 ]
 
 # Status-bean sensors (15s coordinator).
@@ -169,7 +179,47 @@ AUX_SENSORS = [
         "state_class": SensorStateClass.TOTAL_INCREASING,
         "sum_array": True,
     },
+    {
+        "key": "cost_year", "name": "本年费用", "field": "cost",
+        "source": "electricity_year", "unit": "CNY",
+        "device_class": SensorDeviceClass.MONETARY,
+        "state_class": SensorStateClass.TOTAL,
+        "sum_array": True,
+    },
+    {
+        "key": "mode_temp_cool", "name": "制冷记忆温度",
+        "field": "coldModeTemp", "source": "mode_temp",
+        "unit": UnitOfTemperature.CELSIUS,
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    {
+        "key": "mode_temp_heat", "name": "制暖记忆温度",
+        "field": "warmModeTemp", "source": "mode_temp",
+        "unit": UnitOfTemperature.CELSIUS,
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    {
+        "key": "mode_temp_dry", "name": "抽湿记忆温度",
+        "field": "wetModeTemp", "source": "mode_temp",
+        "unit": UnitOfTemperature.CELSIUS,
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
 ]
+
+# Writable electricity price (yuan/kWh) from ACGet/SetAirconElectricChargeInfo.
+CHARGE_NUMBER = {
+    "key": "electricity_charge",
+    "name": "电价",
+    "source": "electricity_charge",
+    "field": "charge",
+    "unit": "CNY/kWh",
+    "min": 0.0,
+    "max": 5.0,
+    "step": 0.01,
+}
 
 BINARY_SENSORS = [
     {
@@ -324,7 +374,7 @@ SUPPORTED_CONTROLLERS = {
             {"key": "runStatus", "name": "电源", "on": 48, "off": 49},
             {
                 "key": "powerful", "aliases": ["highCool"],
-                "capability": "highCoolEx", "name": "强劲制冷",
+                "capability": "highCoolEx", "name": "强劲运转",
                 "on": 1, "off": 0,
             },
             {
@@ -357,7 +407,6 @@ SUPPORTED_CONTROLLERS = {
                 "key": "spaceClean", "capability": "spaceCleanEx",
                 "name": "空间净化", "on": 1, "off": 0,
             },
-            {"key": "buzzer", "name": "蜂鸣提示音", "on": 1, "off": 0},
             {
                 "key": "uvc", "capability": "uvcEx", "name": "UVC 除菌",
                 "on": 1, "off": 0,
@@ -366,11 +415,12 @@ SUPPORTED_CONTROLLERS = {
                 "key": "voiceSet", "capability": "voiceSetEx",
                 "name": "语音提示", "on": 1, "off": 0,
             },
+            # buzzer is intentionally absent: the App sends a fixed
+            # buzzer=65 on every command (COMMAND_BUZZER), it is not a toggle.
         ],
         "remote_buttons": [
             {"key": "runStatus", "name": "电源切换", "toggle": True},
             {"key": "filterReset", "name": "滤网复位", "press": 1},
-            {"key": "selfcleanReset", "name": "自清洁复位", "press": 1},
         ],
         "remote_selects": [
             {
@@ -392,25 +442,13 @@ SUPPORTED_CONTROLLERS = {
                     "偏右": 87, "最右": 65,
                 },
             },
-            {
-                "key": "displaySet", "aliases": ["lamp"], "name": "显示灯模式",
-                "options": {"关": 1, "开": 0},
-            },
-            {
-                "key": "sleepMode", "name": "睡眠模式",
-                "options": {"关闭": 0, "模式 1": 1, "模式 2": 2, "模式 3": 3},
-            },
-            {
-                "key": "powerfulMode", "name": "强劲模式",
-                "options": {"关闭": 0, "模式 1": 1, "模式 2": 2},
-            },
-            {
-                "key": "cleanMode", "name": "清洁模式",
-                "options": {"关闭": 0, "模式 1": 1, "模式 2": 2, "模式 3": 3},
-            },
+            # Removed displaySet / sleepMode / powerfulMode / cleanMode:
+            # none exist in the official AirconCommon bundles or in the live
+            # status bean; they were legacy 1.1.0 ducted-controller names.
         ],
         "status_sensors": STATUS_SENSORS,
         "aux_sensors": AUX_SENSORS,
         "binary_sensors": BINARY_SENSORS,
+        "charge_number": CHARGE_NUMBER,
     },
 }

@@ -13,7 +13,9 @@ from .coordinator import PanasonicAuxCoordinator, PanasonicStatusCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = ["climate", "switch", "select", "button", "sensor", "binary_sensor"]
+PLATFORMS = [
+    "climate", "switch", "select", "button", "sensor", "binary_sensor", "number",
+]
 
 
 async def async_setup(hass: HomeAssistant, config: dict):

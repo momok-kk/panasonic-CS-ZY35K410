@@ -11,14 +11,18 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     AUTH_ERROR_CODES,
+    COMMAND_BUZZER,
     CONF_CONTROLLER_MODEL,
     CONF_DEVICE_ID,
     CONF_SSID,
     CONF_TOKEN,
     CONF_USR_ID,
+    ENDPOINT_CHARGE_GET,
+    ENDPOINT_CHARGE_SET,
     ENDPOINT_ELEC_MONTH,
     ENDPOINT_ELEC_TODAY,
     ENDPOINT_ELEC_YEAR,
+    ENDPOINT_MODE_TEMP,
     SAFE_KEYS,
     SUCCESS_ERROR_CODES,
     SUPPORTED_CONTROLLERS,
@@ -40,7 +44,15 @@ AUX_ENDPOINTS = {
         ENDPOINT_ELEC_YEAR,
         lambda: {"time": time.strftime("%Y-%m-%d")},
     ),
+    "electricity_charge": (ENDPOINT_CHARGE_GET, None),
+    "mode_temp": (ENDPOINT_MODE_TEMP, None),
 }
+# Live responses (2026-11-06):
+#   today  -> {powerToday, costToday, durationToday}
+#   month  -> {powerSelectMonth[], costSelectMonth[], durationSelectMonth[]}
+#   year   -> {power[12], cost[12], setTemperature[12], outsideTemperature[12]}
+#   charge -> {charge: 0.6}
+#   mode_temp -> {coldModeTemp, warmModeTemp, wetModeTemp, *ModeWind}
 
 
 class PanasonicApiError(Exception):
@@ -236,6 +248,17 @@ class PanasonicSmartDevice:
                 result[section] = {}
         return result
 
+    async def set_charge(self, value):
+        """Write the electricity price used by the App's cost charts."""
+        payload = {
+            "id": 200,
+            "usrId": self.usr_id,
+            "deviceId": self.device_id,
+            "token": self.token,
+            "params": {"charge": round(float(value), 2)},
+        }
+        return await self._post(f"{URL_BASE}/{ENDPOINT_CHARGE_SET}", payload)
+
     async def send_command(self, changes):
         """Read-modify-write against the freshest status, then push the update.
 
@@ -258,6 +281,10 @@ class PanasonicSmartDevice:
         # Explicit commands (e.g. filterReset, scene presets) are always
         # forwarded even when they are not part of the status bean whitelist.
         params.update(changes)
+        # The official App stamps buzzer=65 on every NewProtocol command.
+        # It is a per-command beep marker, not a persistent state to echo.
+        if "NewProtocol" in self.url_set:
+            params["buzzer"] = COMMAND_BUZZER
 
         await self._post(
             self.url_set,

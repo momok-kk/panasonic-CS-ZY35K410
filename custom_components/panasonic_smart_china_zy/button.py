@@ -1,35 +1,66 @@
+"""One-shot remote buttons (power toggle, filter reset, clean reset)."""
+
+from __future__ import annotations
+
+import logging
+
 from homeassistant.components.button import ButtonEntity
 
-from .api import PanasonicSmartDevice
+from .api import PanasonicApiError
+from .const import DOMAIN
+from .helpers import device_info
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    device = PanasonicSmartDevice(hass, entry.data, entry.title)
+    runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
+    device = runtime.get("device")
+    coordinator = runtime.get("status")
+    if not device or not coordinator:
+        return
     entities = [
-        PanasonicRemoteButton(hass, entry, description)
+        PanasonicRemoteButton(coordinator, device, entry, description)
         for description in device.profile.get("remote_buttons", [])
     ]
     async_add_entities(entities)
 
 
 class PanasonicRemoteButton(ButtonEntity):
-    def __init__(self, hass, entry, description):
-        self._device = PanasonicSmartDevice(hass, entry.data, entry.title)
+    """Stateless command button; availability follows the shared coordinator."""
+
+    def __init__(self, coordinator, device, entry, description):
+        self._coordinator = coordinator
+        self._device = device
         self._key = description["key"]
         self._press_value = description.get("press", 1)
         self._toggle = description.get("toggle", False)
         self._attr_name = f"{entry.title} {description['name']}"
-        self._attr_unique_id = (
-            f"panasonic_{self._device.device_id}_{self._key}_button"
-        )
+        self._attr_unique_id = f"panasonic_{device.device_id}_{self._key}_button"
+        self._attr_device_info = device_info(device, entry.title)
+
+    @property
+    def should_poll(self):
+        return False
+
+    @property
+    def available(self):
+        return self._coordinator.last_update_success
 
     async def async_press(self):
         if not self._toggle:
-            await self._device.send_command({self._key: self._press_value})
+            await self._send({self._key: self._press_value})
             return
+        params = self._coordinator.data or {}
+        value = (
+            self._device.power_off_value
+            if self._device.is_on(params)
+            else self._device.power_on_value
+        )
+        await self._send({self._key: value})
 
-        params = await self._device.fetch_status()
-        if params and self._device.is_on(params):
-            await self._device.send_command({self._key: self._device.power_off_value})
-        else:
-            await self._device.send_command({self._key: self._device.power_on_value})
+    async def _send(self, changes):
+        try:
+            await self._device.send_command(changes)
+        except PanasonicApiError as err:
+            _LOGGER.error("Button %s failed: %s", self._key, err)

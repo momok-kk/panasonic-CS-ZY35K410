@@ -27,6 +27,43 @@ class PanasonicConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._devices = {}
         self._temp_login_info = {}
 
+    async def async_step_reauth(self, entry_data):
+        """Start reauthentication when the cloud reports 4102/3003."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(self, user_input=None):
+        """Refresh the SSID without changing device identity or entity ids."""
+        errors = {}
+        if user_input is not None:
+            try:
+                usr_id, ssid, _ = await self._authenticate_full_flow(
+                    user_input[CONF_USERNAME], user_input[CONF_PASSWORD]
+                )
+            except Exception as err:
+                _LOGGER.error("Reauthentication failed: %s", err)
+                errors["base"] = "cannot_connect"
+            else:
+                entry_id = self.context.get("entry_id")
+                entry = self.hass.config_entries.async_get_entry(entry_id)
+                if entry:
+                    new_data = dict(entry.data)
+                    new_data[CONF_USR_ID] = usr_id
+                    new_data[CONF_SSID] = ssid
+                    self.hass.config_entries.async_update_entry(entry, data=new_data)
+                    # Invalidate the cached session so other devices re-login.
+                    self.hass.data.setdefault(DOMAIN, {})["session"] = None
+                    await self.hass.config_entries.async_reload(entry.entry_id)
+                return self.async_abort(reason="reauth_successful")
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema({
+                vol.Required(CONF_USERNAME): str,
+                vol.Required(CONF_PASSWORD): str,
+            }),
+            errors=errors,
+        )
+
     async def async_step_user(self, user_input=None):
         """步骤1: 检查缓存 Session 或 登录"""
         errors = {}
@@ -137,14 +174,19 @@ class PanasonicConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     }
                 )
 
-        # 构建控制器列表
+        # 构建控制器列表；设备 ID 后缀带型号时自动选中对应 profile
         controller_options = {k: v["name"] for k, v in SUPPORTED_CONTROLLERS.items()}
+        default_model = "CZ-RD501DW2"
+        if self._devices and all(
+            "CS-ZY35K410" in did.upper() for did in self._devices
+        ):
+            default_model = "CS-ZY35K410"
 
         return self.async_show_form(
             step_id="device",
             data_schema=vol.Schema({
                 vol.Required(CONF_DEVICE_ID): vol.In(available_devices),
-                vol.Required(CONF_CONTROLLER_MODEL, default="CZ-RD501DW2"): vol.In(controller_options),
+                vol.Required(CONF_CONTROLLER_MODEL, default=default_model): vol.In(controller_options),
                 vol.Optional(CONF_SENSOR_ID): EntitySelector(
                     EntitySelectorConfig(domain="sensor")
                 ),

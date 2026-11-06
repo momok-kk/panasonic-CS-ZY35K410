@@ -1,5 +1,8 @@
+"""Climate entity for Panasonic Smart China ZY air conditioners."""
+
+from __future__ import annotations
+
 import logging
-from datetime import timedelta
 
 from homeassistant.components.climate import ClimateEntity
 from homeassistant.components.climate.const import (
@@ -13,29 +16,36 @@ from homeassistant.const import (
     STATE_UNKNOWN,
     UnitOfTemperature,
 )
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .api import PanasonicSmartDevice
-from .const import CONF_SENSOR_ID, FAN_MUTE, NO_EXTERNAL_SENSOR
+from .api import PanasonicApiError
+from .const import CONF_SENSOR_ID, DOMAIN, FAN_MUTE, NO_EXTERNAL_SENSOR
+from .helpers import device_info
 
 _LOGGER = logging.getLogger(__name__)
 
-POLLING_INTERVAL = timedelta(seconds=15)
-
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    """Set up climate entity."""
-    async_add_entities([PanasonicACEntity(hass, entry.data, entry.title)])
+    runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
+    device = runtime.get("device")
+    coordinator = runtime.get("status")
+    if not device or not coordinator:
+        return
+    async_add_entities([PanasonicACEntity(coordinator, device, entry)])
 
 
-class PanasonicACEntity(ClimateEntity):
-    def __init__(self, hass, config, name):
-        self._hass = hass
-        self._sensor_id = config.get(CONF_SENSOR_ID, NO_EXTERNAL_SENSOR)
-        self._device = PanasonicSmartDevice(hass, config, name)
-        self._profile = self._device.profile
-        self._attr_name = name
-        self._attr_unique_id = f"panasonic_{self._device.device_id}"
+class PanasonicACEntity(CoordinatorEntity, ClimateEntity):
+    """Main AC control; state is pushed by the shared coordinator."""
+
+    def __init__(self, coordinator, device, entry):
+        super().__init__(coordinator)
+        self._hass = coordinator.hass
+        self._device = device
+        self._sensor_id = entry.data.get(CONF_SENSOR_ID, NO_EXTERNAL_SENSOR)
+        self._profile = device.profile
+        self._attr_name = entry.title
+        self._attr_unique_id = f"panasonic_{device.device_id}"
+        self._attr_device_info = device_info(device, entry.title)
 
         self._hvac_map = self._profile.get("hvac_mapping", {})
         self._fan_map = self._profile.get("fan_mapping", {})
@@ -50,7 +60,6 @@ class PanasonicACEntity(ClimateEntity):
         self._fan_mode = FAN_AUTO
         self._swing_mode = self._first_mode(self._vertical_swing_map)
         self._swing_horizontal_mode = self._first_mode(self._horizontal_swing_map)
-        self._unsub_polling = None
 
     @staticmethod
     def _first_mode(mode_map):
@@ -63,27 +72,12 @@ class PanasonicACEntity(ClimateEntity):
                 return name
         return current_mode or PanasonicACEntity._first_mode(mode_map)
 
-    @property
-    def should_poll(self):
-        return False
-
     async def async_added_to_hass(self):
         await super().async_added_to_hass()
-        self._unsub_polling = async_track_time_interval(
-            self._hass,
-            self._async_update_interval_wrapper,
-            POLLING_INTERVAL,
-        )
-        await self.async_update()
+        self._update_local_state(self.coordinator.data or {})
 
-    async def async_will_remove_from_hass(self):
-        if self._unsub_polling:
-            self._unsub_polling()
-            self._unsub_polling = None
-        await super().async_will_remove_from_hass()
-
-    async def _async_update_interval_wrapper(self, now):
-        await self.async_update()
+    def _handle_coordinator_update(self):
+        self._update_local_state(self.coordinator.data or {})
         self.async_write_ha_state()
 
     @property
@@ -96,7 +90,6 @@ class PanasonicACEntity(ClimateEntity):
         )
         if self._vertical_swing_map:
             features |= ClimateEntityFeature.SWING_MODE
-
         horizontal_feature = getattr(ClimateEntityFeature, "SWING_HORIZONTAL_MODE", 0)
         if self._horizontal_swing_map and horizontal_feature:
             features |= horizontal_feature
@@ -131,7 +124,7 @@ class PanasonicACEntity(ClimateEntity):
     @property
     def fan_modes(self):
         modes = list(self._fan_map.keys())
-        for mode in self._fan_overrides.keys():
+        for mode in self._fan_overrides:
             if mode not in modes:
                 modes.append(mode)
         return modes
@@ -158,11 +151,9 @@ class PanasonicACEntity(ClimateEntity):
 
     @property
     def current_temperature(self):
+        state = None
         if self._sensor_id and self._sensor_id != NO_EXTERNAL_SENSOR:
             state = self._hass.states.get(self._sensor_id)
-        else:
-            state = None
-
         if state and state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             try:
                 return float(state.state)
@@ -174,25 +165,15 @@ class PanasonicACEntity(ClimateEntity):
     def target_temperature(self):
         return self._target_temperature
 
-    async def async_update(self):
-        res = await self._device.fetch_status()
-        if res:
-            self._update_local_state(res)
-
     def _update_local_state(self, res):
         self._is_on = self._device.is_on(res)
         self._target_temperature = self._device.read_target_temperature(
-            res,
-            self._target_temperature,
+            res, self._target_temperature
         )
         self._current_temperature = self._device.read_current_temperature(res)
-
         self._hvac_mode = self._mode_from_value(
-            self._hvac_map,
-            res.get("runMode"),
-            self._hvac_mode,
+            self._hvac_map, res.get("runMode"), self._hvac_mode
         )
-
         if (
             res.get("windSet") == 10
             and res.get("muteMode") == 1
@@ -201,15 +182,10 @@ class PanasonicACEntity(ClimateEntity):
             self._fan_mode = FAN_MUTE
         else:
             self._fan_mode = self._mode_from_value(
-                self._fan_map,
-                res.get("windSet"),
-                self._fan_mode,
+                self._fan_map, res.get("windSet"), self._fan_mode
             )
-
         self._swing_mode = self._mode_from_value(
-            self._vertical_swing_map,
-            res.get("portraitWindSet"),
-            self._swing_mode,
+            self._vertical_swing_map, res.get("portraitWindSet"), self._swing_mode
         )
         self._swing_horizontal_mode = self._mode_from_value(
             self._horizontal_swing_map,
@@ -221,7 +197,6 @@ class PanasonicACEntity(ClimateEntity):
         if hvac_mode == HVACMode.OFF:
             await self._send_command({"runStatus": self._device.power_off_value})
             return
-
         p_mode = self._hvac_map.get(hvac_mode)
         if p_mode is None:
             _LOGGER.warning("Unsupported HVAC mode requested: %s", hvac_mode)
@@ -252,7 +227,7 @@ class PanasonicACEntity(ClimateEntity):
     async def async_set_swing_mode(self, swing_mode):
         val = self._vertical_swing_map.get(swing_mode)
         if val is None:
-            _LOGGER.warning("Unsupported vertical swing mode requested: %s", swing_mode)
+            _LOGGER.warning("Unsupported vertical swing mode: %s", swing_mode)
             return
         await self._send_command({"portraitWindSet": val})
 
@@ -260,8 +235,7 @@ class PanasonicACEntity(ClimateEntity):
         val = self._horizontal_swing_map.get(swing_horizontal_mode)
         if val is None:
             _LOGGER.warning(
-                "Unsupported horizontal swing mode requested: %s",
-                swing_horizontal_mode,
+                "Unsupported horizontal swing mode: %s", swing_horizontal_mode
             )
             return
         await self._send_command({"orientationWindSet": val})
@@ -273,7 +247,7 @@ class PanasonicACEntity(ClimateEntity):
         await self._send_command({"runStatus": self._device.power_off_value})
 
     async def _send_command(self, changes):
-        params = await self._device.send_command(changes)
-        if params:
-            self._update_local_state(params)
-            self.async_write_ha_state()
+        try:
+            await self._device.send_command(changes)
+        except PanasonicApiError as err:
+            _LOGGER.error("Climate command %s failed: %s", changes, err)

@@ -1,48 +1,76 @@
-from homeassistant.components.select import SelectEntity
+"""Select entities for Panasonic AirconCommon devices (scene, swing position)."""
 
-from .api import PanasonicSmartDevice
+from __future__ import annotations
+
+import logging
+
+from homeassistant.components.select import SelectEntity
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
+from .api import PanasonicApiError
+from .const import DOMAIN
+from .helpers import as_int, capability_ok, device_info, resolve_key
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    device = PanasonicSmartDevice(hass, entry.data, entry.title)
+    runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
+    device = runtime.get("device")
+    coordinator = runtime.get("status")
+    if not device or not coordinator:
+        return
     entities = [
-        PanasonicRemoteSelect(hass, entry, description)
+        PanasonicRemoteSelect(coordinator, device, entry, description)
         for description in device.profile.get("remote_selects", [])
     ]
-    async_add_entities(entities, True)
+    async_add_entities(entities)
 
 
-class PanasonicRemoteSelect(SelectEntity):
-    def __init__(self, hass, entry, description):
-        self._device = PanasonicSmartDevice(hass, entry.data, entry.title)
+class PanasonicRemoteSelect(CoordinatorEntity, SelectEntity):
+    """A labelled status field with a label -> protocol value map."""
+
+    def __init__(self, coordinator, device, entry, description):
+        super().__init__(coordinator)
+        self._device = device
         self._key = description["key"]
+        self._aliases = tuple(description.get("aliases", ()))
+        self._capability = description.get("capability")
         self._options_map = description["options"]
         self._value_to_option = {
             value: option for option, value in self._options_map.items()
         }
         self._attr_name = f"{entry.title} {description['name']}"
-        self._attr_unique_id = (
-            f"panasonic_{self._device.device_id}_{self._key}_select"
-        )
+        self._attr_unique_id = f"panasonic_{device.device_id}_{self._key}_select"
         self._attr_options = list(self._options_map.keys())
-        self._attr_available = False
-        self._attr_current_option = None
+        self._attr_device_info = device_info(device, entry.title)
 
-    async def async_update(self):
-        params = await self._device.fetch_status()
-        if not params:
-            self._attr_available = False
-            return
-        self._update_from_params(params)
+    @property
+    def _data(self):
+        return self.coordinator.data or {}
+
+    @property
+    def _active_key(self):
+        return resolve_key(self._data, self._key, self._aliases)
+
+    @property
+    def available(self):
+        data = self._data
+        return (
+            self.coordinator.last_update_success
+            and self._active_key in data
+            and capability_ok(data, self._capability)
+        )
+
+    @property
+    def current_option(self):
+        return self._value_to_option.get(as_int(self._data.get(self._active_key)))
 
     async def async_select_option(self, option):
         value = self._options_map.get(option)
         if value is None:
             return
-        params = await self._device.send_command({self._key: value})
-        if params:
-            self._update_from_params(params)
-
-    def _update_from_params(self, params):
-        self._attr_available = self._key in params
-        self._attr_current_option = self._value_to_option.get(params.get(self._key))
+        try:
+            await self._device.send_command({self._active_key: value})
+        except PanasonicApiError as err:
+            _LOGGER.error("Select %s command failed: %s", self._key, err)

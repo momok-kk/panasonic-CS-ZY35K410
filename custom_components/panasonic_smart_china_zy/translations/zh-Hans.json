@@ -17,6 +17,14 @@
           "controller_model": "线控器/遥控器型号",
           "sensor_entity_id": "关联室温传感器 (可选)"
         }
+      },
+      "reauth_confirm": {
+        "title": "重新登录松下账号",
+        "description": "云端会话已过期（认证错误 4102）。请重新输入账号密码刷新 SSID。\n注意：松下账号为单点登录，本次登录会使手机 App 掉线。设备 ID 与已有实体不会改变。",
+        "data": {
+          "username": "手机号",
+          "password": "密码"
+        }
       }
     },
     "error": {

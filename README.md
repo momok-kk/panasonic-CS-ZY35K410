@@ -1,8 +1,9 @@
 # 松下 CS-ZY35K410 专用集成
 
-[![version](https://img.shields.io/badge/version-2.5.1-blue.svg)]()
+[![release](https://img.shields.io/github/v/release/609293964/panasonic-CS-ZY35K410?display_name=tag&sort=semver)](https://github.com/609293964/panasonic-CS-ZY35K410/releases)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.8%2B-41BDF5.svg)]()
-[![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)]()
+[![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
+[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=609293964&repository=panasonic-CS-ZY35K410&category=integration)
 
 非官方 Home Assistant 集成，通过松下中国智能家电云（`app.psmartcloud.com`）接入 **CS-ZY35K410** 壁挂空调。
 
@@ -72,11 +73,28 @@
 
 ## 安装
 
-HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Panasonic CS-ZY35K410` → 下载 → 重启 HA。
+### 方式一：HACS 一键添加（推荐）
 
-手动：复制 `custom_components/panasonic_smart_china_zy` 到 `/config/custom_components/`，重启后添加集成。
+点了下面这个按钮会直接跳到**你自己的** Home Assistant，弹出「添加自定义存储库」并预填好地址，确认后安装即可：
 
-集成名称与图标全部为本地 PNG，不依赖在线资源：`brand/icon.png`（512×512，集成列表方图）、`brand/logo.png`（1024×384，详情页横幅），根目录同名文件用于兼容 2024.11 之前的 HA。
+[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=609293964&repository=panasonic-CS-ZY35K410&category=integration)
+
+前提：HA 里已装 HACS，且浏览器能访问到你的 HA（`my.home-assistant.io` 是官方跳板，不会上传任何数据）。
+
+### 方式二：HACS 手动添加
+
+1. HACS → 右上角 **⋮** → **自定义存储库 / Custom repositories**
+2. 地址填 `https://github.com/609293964/panasonic-CS-ZY35K410`，类别选 **集成 / Integration** → 添加
+3. 回到 HACS 搜索 `Panasonic CS-ZY35K410` → 下载
+4. **重启 Home Assistant**（custom component 必须重启才加载）
+
+### 方式三：手动复制
+
+下载仓库 ZIP，把 `custom_components/panasonic_smart_china_zy` 整个目录放到 `/config/custom_components/`，重启 HA。
+
+> 目录名必须是 `panasonic_smart_china_zy`（与 `manifest.json` 的 `domain` 一致），改名会导致集成加载失败。
+
+安装完成后，集成名称与图标全部为本地 PNG，不依赖在线资源：`brand/icon.png`（512×512，集成列表方图）、`brand/logo.png`（1024×384，详情页横幅），根目录同名文件用于兼容 2024.11 之前的 HA。
 
 ## 配置
 

@@ -1,10 +1,10 @@
 {
   "domain": "panasonic_smart_china_zy",
   "name": "Panasonic CS-ZY35K410",
-  "documentation": "https://github.com/zz23/panasonic_smart_china_ac",
-  "issue_tracker": "https://github.com/zz23/panasonic_smart_china_ac/issues",
+  "documentation": "https://github.com/609293964/panasonic-CS-ZY35K410",
+  "issue_tracker": "https://github.com/609293964/panasonic-CS-ZY35K410/issues",
   "dependencies": [],
-  "codeowners": [],
+  "codeowners": ["@609293964"],
   "requirements": [],
   "version": "2.5.1",
   "iot_class": "cloud_polling",

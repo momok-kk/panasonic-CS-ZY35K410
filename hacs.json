@@ -1,4 +1,7 @@
 {
-  "name": "Panasonic Smart China ZY Custom",
-  "render_readme": true
+  "name": "Panasonic CS-ZY35K410",
+  "render_readme": true,
+  "homeassistant": "2024.8.0",
+  "domains": ["climate"],
+  "country": ["CN"]
 }

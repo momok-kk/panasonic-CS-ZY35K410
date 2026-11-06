@@ -14,7 +14,7 @@ from .coordinator import PanasonicAuxCoordinator, PanasonicStatusCoordinator
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = [
-    "climate", "switch", "button", "sensor", "binary_sensor", "number",
+    "climate", "switch", "select", "button", "sensor", "binary_sensor", "number",
 ]
 
 

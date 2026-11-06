@@ -433,16 +433,32 @@ DEVICE_PROFILE = {
             "payload": {"filter": 1, "filterReset": 1},
         },
     ],
-    # No "remote_selects" at all (2.5.0):
-    #   scene            -> the live status bean has neither `scene` nor a
-    #                       `sceneEx` capability flag, so the entity was
-    #                       permanently unavailable (grey) on this model.
-    #   portraitWindSet  -> duplicated the climate entity's swing_mode.
-    #   orientationWindSet -> duplicated swing_horizontal_mode.
-    # Swing is controlled only through the climate entity now.
-    # displaySet / sleepMode / powerfulMode / cleanMode were already removed
-    # in 2.1.0: none exist in the official AirconCommon bundles or in the
-    # live status bean.
+    # Swing position selects (restored in 2.5.1) duplicate the climate
+    # entity's swing_mode / swing_horizontal_mode on the same two fields.
+    # They are kept as a fallback entry point but disabled by default, so a
+    # fresh install registers them in the registry without cluttering the UI.
+    # `scene` stays deleted: the live status bean has neither `scene` nor a
+    # `sceneEx` capability flag, so that entity was permanently unavailable.
+    # displaySet / sleepMode / powerfulMode / cleanMode were removed in 2.1.0.
+    "remote_selects": [
+        {
+            "key": "portraitWindSet", "name": "上下扫风位置",
+            "enabled_default": False,
+            "options": {
+                "自动": 70, "方向1": 65, "方向2": 68, "方向3": 67,
+                "方向4": 69, "方向5": 66,
+            },
+        },
+        {
+            "key": "orientationWindSet", "name": "左右扫风位置",
+            "enabled_default": False,
+            "capability": "leftType",
+            "options": {
+                "自动": 64, "最左": 66, "偏左": 108, "正对": 67,
+                "偏右": 87, "最右": 65,
+            },
+        },
+    ],
     "status_sensors": STATUS_SENSORS,
     "aux_sensors": AUX_SENSORS,
     "binary_sensors": BINARY_SENSORS,

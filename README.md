@@ -1,7 +1,7 @@
 # Panasonic CS-ZY35K410 for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-[![version](https://img.shields.io/badge/version-2.5.0-blue.svg)]()
+[![version](https://img.shields.io/badge/version-2.5.1-blue.svg)]()
 
 面向中国区「松下智能家电」App 的 Home Assistant 自定义集成，集成显示名 **Panasonic CS-ZY35K410**，**仅适配 CS-ZY35K410**（洵风系列，2024 AirconCommon 新协议，设备类别 `0900`）；2.4.0 起不再兼容其它机型或设备类别。域名 `panasonic_smart_china_zy`，不与原版 `panasonic_smart_china` 冲突。
 
@@ -19,7 +19,7 @@
 
 ## 本次更新接入了什么（1.x → 2.4.0）
 
-这一轮不是「多接几个实体」，而是拿官方 H5 主包 + 26 个懒加载 chunk 的完整字段字典，配合本机真实云端响应把协议重新对齐，最后在 2.4.0 收敛为单型号专用：**运行期覆盖 18 个云端端点（15 读 / 3 写），另有 2 个登录端点**；实体从字段错配、各自轮询，重整为 **6 个平台 / 32 个定义 / 30 个默认可见**；能拿到但不需要用户操作的数据一律做成属性。
+这一轮不是「多接几个实体」，而是拿官方 H5 主包 + 26 个懒加载 chunk 的完整字段字典，配合本机真实云端响应把协议重新对齐，最后在 2.4.0 收敛为单型号专用：**运行期覆盖 18 个云端端点（15 读 / 3 写），另有 2 个登录端点**；实体从字段错配、各自轮询，重整为 **7 个平台 / 34 个定义 / 30 个默认可见**；能拿到但不需要用户操作的数据一律做成属性。
 
 ### 新接入的云端能力
 
@@ -71,12 +71,13 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 
 > 松下账号是**单点登录**。HA 登录后手机 App 会掉线；手机重新登录又会让 HA 会话失效。会话失效时集成会提示「重新登录松下账号」，重新输入密码即可，设备 ID 与已有实体 ID 不变。
 
-## 实体清单（共 32 个定义，默认启用 30 个）
+## 实体清单（共 34 个定义，默认启用 30 个）
 
 | 平台 | 实体 | 状态字段 / 端点 | 门控 |
 |---|---|---|---|
 | climate ×1 | 空调 | `runStatus` / `runMode` / `setTemperature` / `windSet` / `portraitWindSet` / `orientationWindSet` | — |
 | switch ×10 | 电源、强劲运转、自清洁、柔湿制冷、辅热、纳诺怡、睡眠、显示灯、空间净化、**定时开关** | `highCool` / `cleanSet` / `cool` / `elecHeat` / `nanoe` / `lamp` / `spaceClean` / `fixTimeStatus` | `*Ex` 能力位 |
+| select ×2 | ~~上下扫风位置~~、~~左右扫风位置~~（均默认禁用） | `portraitWindSet` / `orientationWindSet` | 左右扫风由 `leftType` 门控 |
 | button ×2 | 电源切换、滤网复位 | `runStatus` / `filter` + `filterReset` | — |
 | sensor ×16 | ~~回风温度~~（默认隐藏）、故障码、今日用电量/时长/费用、本月用电量/时长/费用、本年用电量/费用、制冷/制暖/抽湿记忆温度、定时计划、**逐时用电**、**设备信息** | 状态 bean + 电量/电价/模式温度/定时 + `ACGetAirconDayGraphInfo` / `ACGetAirconMonthGraphInfo` / `ACDevGetFwVersion` 等 | — |
 | binary_sensor ×2 | 故障、~~滤网需更换~~（默认隐藏） | `alarmCode` / `filterReset` | — |
@@ -104,7 +105,7 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 - 上下扫风：Auto(70)、方向 1–5(65/68/67/69/66)
 - 左右扫风：Auto(64)、最左(66)、偏左(108)、正对(67)、偏右(87)、最右(65)
 
-> 上下 / 左右扫风只通过 climate 实体的「摆动模式」「水平摆动模式」两个下拉控制；2.5.0 已删除原来重复的 3 个 select（场景、上下扫风位置、左右扫风位置），`portraitWindSet` / `orientationWindSet` 仍由 climate 读写。
+> 上下 / 左右扫风**主入口是 climate 实体的「摆动模式」「水平摆动模式」**两个下拉；`select.上下扫风位置` / `select.左右扫风位置` 是 2.5.1 恢复的备用入口，写的是同一对字段（`portraitWindSet` / `orientationWindSet`），**默认禁用**（`enabled_default: False`），需要时在 HA「实体」页筛选「已禁用」重新启用即可。`场景` select 已彻底删除——本机状态报文无 `scene` 字段，也无 `sceneEx` 能力位。
 
 ### App 配色（模式色值）
 
@@ -191,7 +192,8 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 |---|---|
 | 其它机型 / 设备类别 | **2.4.0 起不支持**：只接 CS-ZY35K410（0900），旧线控器 CZ-RD501DW2 与非空调设备已从代码中移除 |
 | 空调本体室温 | 云端不下发（`inhaleTemperature=128` 为哨兵值，官方 App 也读不到）；需外部温感 + 配置项 `sensor_entity_id` |
-| 风感场景（环抱/超远/怡静） | **本机型不支持**：51 个状态字段无 `scene`，也无 `sceneEx` 能力位 → 2.5.0 已删除该 select（原实体恒为 `unavailable`） |
+| 风感场景（环抱/超远/怡静） | **本机型不支持**：51 个状态字段无 `scene`，也无 `sceneEx` 能力位 → 2.5.0 起不注册该 select（原实体恒为 `unavailable`） |
+| 扫风 select 与 climate 重复 | 2.5.1 恢复 `上下/左右扫风位置` 两个 select，但**默认禁用**：与 climate 的「摆动模式/水平摆动模式」写同一对字段，留着当备用入口，不占用界面 |
 | 显示灯平台 | 保持 `switch`（协议为反向二值 0=亮 / 1=灭，已实机确认）；无亮度 / 色温，不转成 `light` |
 | 定时开关机 | **2.2.0 已接入**：总开关可写、每周计划只读展示；定时条目的增删改未提供（避免误写覆盖 App 计划） |
 | 新风独立 fan 实体 | 本机 `ervType=0`（无新风模块），2.2.1 起不再注册「新风运行」实体 |
@@ -217,7 +219,9 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 
 2.4.1 集成显示名改为 `Panasonic CS-ZY35K410`（manifest `name`），并补齐品牌图标：`brand/icon.png`、`brand/logo.png` 及根目录同名文件。**只影响集成在 UI 中的名称与图标**，设备名、`unique_id`、`entity_id` 与实体状态均不变。
 
-2.5.0 删除 `select` 平台（35→32，平台数 7→6）：① `场景`——官方 App 有「风感场景」（关闭/怡静风/超远风/环抱风，64–67），但本机状态报文里既无 `scene` 字段也无 `sceneEx` 能力位，实体永远 `unavailable`（灰）；② `上下扫风位置`、`左右扫风位置`——与 climate 的「摆动模式」「水平摆动模式」写的是同一对字段（`portraitWindSet` / `orientationWindSet`），重复入口。扫风统一由 climate 实体控制，功能无损失。三个 select 在 HA 中会变成孤儿实体，需在「实体」页面删除（本次已代为清理注册表）。
+2.5.0 删除 `select` 平台（35→32，平台数 7→6）：① `场景`——官方 App 有「风感场景」（关闭/怡静风/超远风/环抱风，64–67），但本机状态报文里既无 `scene` 字段也无 `sceneEx` 能力位，实体永远 `unavailable`（灰）；② `上下扫风位置`、`左右扫风位置`——与 climate 的「摆动模式」「水平摆动模式」写的是同一对字段（`portraitWindSet` / `orientationWindSet`），重复入口。三个 select 在 HA 中会变成孤儿实体，需在「实体」页面删除（本次已代为清理注册表）。
+
+2.5.1 修正 2.5.0 的后半部分：**恢复 `上下扫风位置`、`左右扫风位置` 两个 select，但设为默认禁用**（`enabled_default: False` → 实际属性 `_attr_entity_registry_enabled_default = False`）。全新安装会在实体注册表里注册这两条（`disabled_by: integration`），界面不出现，需要时手动启用即可；`场景` 仍不恢复。实体回到 34 个定义 / 30 个默认可见，平台 7 个。集成代码层面（写法与 climate 的 swing 下拉一致）不会冲突，两者只是同一字段的两个入口。
 
 > 关于 `entity_id`：2.4.0 说的「不变」适用于保留实体注册表的升级；若清空注册表做全新安装，HA 会按当前中文实体名重新生成 ID（如 `switch.wo_shi_kong_diao_dian_yuan`），`unique_id` 与实体功能不受影响。
 

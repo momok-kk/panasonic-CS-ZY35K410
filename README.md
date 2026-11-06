@@ -13,9 +13,45 @@
 | `ACDevGetStatusInfoAW` / `ACDevSetStatusNewProtocol` | 状态读取 / 控制端点 |
 | 瀚思彼岸论坛 17153 帖 43# | `runStatus` 48/49、`runMode` 65–69、风速与扫风枚举的实测记录 |
 | `panasonic_smart_china` v3.0.0 `profiles/split_ac_0900_airconcommon.py` | 同一协议的社区逆向成果，用于校验能力门控与用电统计端点 |
-| **本机实机状态（2026-11-06）** | 温度刻度、`*Ex` 能力位、5 个辅助端点返回结构均经真实响应核对 |
+| **本机实机状态（2026-11-06）** | 温度刻度、`*Ex` 能力位、9 个辅助端点与 6 个元数据端点的返回结构均经真实响应核对 |
 
 设备 token 由 `deviceId` 经双重 SHA-512 推导，已对本机实测值校验一致，**无需抓包，也无需反编译 APK**。
+
+## 本次更新接入了什么（1.x → 2.3.1）
+
+这一轮不是「多接几个实体」，而是拿官方 H5 主包 + 26 个懒加载 chunk 的完整字段字典，配合本机真实云端响应把协议重新对齐：**运行期从状态读/写扩展到 20 个云端端点（16 读 / 4 写，其中 1 个写端点仅供旧机型兼容）**；实体从字段错配、各自轮询，重整为 **7 个平台 / 35 个定义 / 33 个默认可见**；能拿到但不需要用户操作的数据一律做成属性。
+
+### 新接入的云端能力
+
+| 类别 | 端点 | 接入内容 | 频率 |
+|---|---|---|---|
+| 状态与控制 | `ACDevGetStatusInfoAW`、`ACDevSetStatusNewProtocol`（旧机型 `ACDevSetStatusInfoAW`） | 开关 / 模式 / 设定温度 / 风速 / 上下与左右扫风 / 场景 / 10 组 `*Ex` 门控开关 / 2 个按钮 | 15s 读，操作时写 |
+| 用电统计 | `ACGetElectricChargeTodayInfo`、`ACGetElectricChargeDaylyInfo`、`ACGetAirconYearGraphInfo` | 今日 / 本月 / 本年电量、电费、运行时长 | 60s |
+| **逐时·逐日曲线** | `ACGetAirconDayGraphInfo`、`ACGetAirconMonthGraphInfo` | 24 点 power / cost / 设定温度、30 天日用电与日费用数组（原本只在 App 图表里） | 60s |
+| 电价与模式记忆 | `ACGetAirconElectricChargeInfo`、`ACSetAirconElectricChargeInfo`、`ACGetModeTempInfo` | 电价可写（本机 0.6 元/kWh）、制冷 / 制暖 / 抽湿记忆温度与风速 | 60s |
+| 定时 | `ACGetAirconTimerNewProtocol`、`ACGetAirconFixTimeStatusInfo`、`ACSetAirconFixTimeStatusInfo` | 每周计划只读展示、定时总开关可写 | 60s |
+| **设备元数据** | `ACDevGetFwVersion`、`ACDevGetOTAPercent`、`ACDevGetHelpAndErrorInfo`、`ACDevGetMasterUser`、`DevGetName`、`ACGetAllAirconListCommon` | 固件版本、OTA 进度、官方帮助 / 故障图、设备名、主用户、全屋设备数 | 30min 客户端缓存 |
+| 登录与认证 | `UsrGetBindDevInfo`、`UsrGetToken` | 绑定设备列表、token 推导、会话失效自动触发 HA 重新认证 | 配置 / reauth 时 |
+
+`ACSetAirconTimerNewProtocol`（定时条目写入）虽已确认格式，但**刻意不调用**：误写会静默覆盖 App 里配好的计划。
+
+### 落到 HA 的形式
+
+- **实体**：35 个定义 / 33 个默认可见，原有 `unique_id` 与 `entity_id` 全部保留，旧自动化、仪表盘无需改动。清单见下节。
+- **属性而非实体**：模式配色、19 个 `*Ex` 能力位、12 项设备诊断、24 点逐时曲线、30 天日曲线、记忆风速、官方帮助图链接，挂在 climate 与已有 sensor 上，不制造「实体多但没用」的噪音。
+- **清理**：删掉 6 个协议里不存在的历史实体（`displaySet` / `sleepMode` / `powerfulMode` / `cleanMode` / `buzzer` / `selfcleanReset`）与 3 个本机型不支持的实体（UVC 除菌 / 语音提示 / 新风运行）；HA 侧清掉 16 条孤儿注册记录；「回风温度」「滤网需更换」2 个无效只读实体改为默认禁用（可随时重新启用）。
+- **写入路径**：新协议改为增量写入（只发变更字段 + `buzzer=65`），滤网复位改为 `filter` + `filterReset` 双发；一次性指令不写入乐观状态，避免误报。
+
+### 实机校准后确定的行为（CS-ZY35K410，2026-11-06）
+
+| 实机事实 | 结论 |
+|---|---|
+| `tempType=0`、`setTemperature=27` | 温度 x1 编码，`target_temp_step = 1.0`（26 → 27 → 28），**不是 0.5℃**；0.5℃ 只属于 `tempType=1` 的 x2 机型 |
+| 51 个状态字段无实测室温，`inhaleTemperature=128` 是哨兵值 | 硬件有回风探头，但中国云端不下发读数（官方 App 同样读不到）；`climate.current_temperature` 走配置项 `sensor_entity_id`，当前接的是外部温感 `sensor.linp_ks2bb_ec09_temperature` |
+| `lamp` 是反向二值（0=亮 / 1=灭），实机 `lamp=1` → HA 显示 `off` | **已实机确认状态正确**，保持 `switch` 平台，不换 `light`：无亮度 / 色温 / 颜色，换过去会被「全屋关灯」类自动化与语音指令误伤 |
+| 云端不下发 `scene` 回显 | `select.场景` 可写但无状态回显，HA 中显示 `unavailable`，属协议限制 |
+| `spaceCleanEx=1` | 空间净化为硬件真实支持，保留 |
+| `uvcEx=0` / `voiceSetEx=0` / `ervType=0` | UVC 除菌、语音提示、新风运行已移除 |
 
 ## 安装
 
@@ -113,13 +149,16 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 - **单设备单轮询**：所有实体共享一个 `PanasonicStatusCoordinator`（15s）与一个 `PanasonicAuxCoordinator`（60s），不再每个实体各发一次云端请求。
 - **增量写入（2.3.0）**：`ACDevSetStatusNewProtocol` 是增量协议，官方 H5 的 `setStatusInfoAWByOne` 只发单个字段（如 `{"params":{"portraitWindSet":65}}`），设备保留其余状态。实机回写当前值验证返回 `todoId:327/328/329` 且状态 diff 为空，因此集成不再全量回显状态 bean —— 少一次云端读取，也避免把只读诊断值误写回设备。旧 `CZ-RD501DW2` 的 `ACDevSetStatusInfoAW` 仍保留原来的 read-modify-write 白名单逻辑。官方 App 每条指令固定带 `buzzer=65`（提示音标记，非开关），集成同样处理。
 - **认证失效**：识别顶层 `errorCode` 与嵌套 `error.code`（3003/3004/403/4102），触发 HA 重新认证流程，不再静默失败。
-- **温度刻度**：实机 `setTemperature=27` 对应 27℃，确认本机为 **x1**；集成仍保留自动判断（>45 视为 x2）以兼容其他固件。
+- **温度刻度**：实机 `tempType=0` / `setTemperature=27` 对应 27℃，本机为 **x1、步长 1.0℃**；集成仍保留自动判断（>45 视为 x2）以兼容 `tempType=1` 的半度机型。云端不下发实测室温，`current_temperature` 由配置项 `sensor_entity_id` 指定的外部温感提供。
 - **设备归组**：所有实体带 `DeviceInfo`，在 HA 中归入同一个设备卡片。
 
 ## 已知限制
 
 | 项目 | 状态 |
 |---|---|
+| 空调本体室温 | 云端不下发（`inhaleTemperature=128` 为哨兵值，官方 App 也读不到）；需外部温感 + 配置项 `sensor_entity_id` |
+| `select.场景` 状态回显 | 云端无 `scene` 回读，实体显示 `unavailable`；指令仍可下发 |
+| 显示灯平台 | 保持 `switch`（协议为反向二值 0=亮 / 1=灭，已实机确认）；无亮度 / 色温，不转成 `light` |
 | 定时开关机 | **2.2.0 已接入**：总开关可写、每周计划只读展示；定时条目的增删改未提供（避免误写覆盖 App 计划） |
 | 新风独立 fan 实体 | 本机 `ervType=0`（无新风模块），2.2.1 起不再注册「新风运行」实体 |
 | `highWarm` / `nanoeX` 独立开关 | **刻意不做**：官方用同一 `highCool` 按制冷/制热派生「强智冷/强智暖」；`nanoeX` 与 `nanoe` / `o2Set` / `runMode` 是联动状态机，单独写会破坏联动 |

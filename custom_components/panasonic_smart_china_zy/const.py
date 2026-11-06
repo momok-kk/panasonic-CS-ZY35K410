@@ -1,13 +1,14 @@
-"""Constants and device profiles for the Panasonic Smart China ZY integration.
+"""Constants and the device profile for the Panasonic CS-ZY35K410 integration.
 
-The CS-ZY35K410 uses the 2024 "AirconCommon" new protocol, reverse engineered
-from the official web panel at:
+This integration supports exactly ONE model: the CS-ZY35K410 (2024
+"AirconCommon" protocol), reverse engineered from the official web panel at:
 
     https://app.psmartcloud.com/ca/cn/0900/AirconCommon/
 
-Its control endpoint is ACDevSetStatusNewProtocol.  Status is still read from
-ACDevGetStatusInfoAW.  Feature availability is gated by "*Ex" capability flags
-in the status bean, exactly as the official web app does.
+Status: ACDevGetStatusInfoAW; control: ACDevSetStatusNewProtocol (incremental).
+Feature availability is gated by "*Ex" capability flags in the status bean,
+exactly as the official web app does.  No other controller model, protocol or
+device category is supported.
 """
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
@@ -23,17 +24,20 @@ from homeassistant.const import UnitOfEnergy, UnitOfTemperature, UnitOfTime
 
 DOMAIN = "panasonic_smart_china_zy"
 
+DEVICE_MODEL = "CS-ZY35K410"
+# deviceId is MAC_CATEGORY_MODEL, e.g. B812DAC81168_0900_CS-ZY35K410.
+DEVICE_CATEGORY = "0900"
+
 CONF_USR_ID = "usrId"
 CONF_DEVICE_ID = "deviceId"
 CONF_TOKEN = "token"
 CONF_SSID = "SSID"
 CONF_SENSOR_ID = "sensor_entity_id"
-CONF_CONTROLLER_MODEL = "controller_model"
 
 NO_EXTERNAL_SENSOR = ""
 
 URL_BASE = "https://app.psmartcloud.com/App"
-URL_SET = f"{URL_BASE}/ACDevSetStatusInfoAW"
+URL_SET = f"{URL_BASE}/ACDevSetStatusNewProtocol"
 URL_GET = f"{URL_BASE}/ACDevGetStatusInfoAW"
 
 # Read-only auxiliary endpoints (official AirconCommon web app).
@@ -45,8 +49,8 @@ ENDPOINT_CHARGE_GET = "ACGetAirconElectricChargeInfo"
 ENDPOINT_CHARGE_SET = "ACSetAirconElectricChargeInfo"
 
 # Weekly timer ("fix time") endpoints from the official AirconCommon web app.
+# ACSetAirconTimerNewProtocol (schedule editing) is deliberately NOT called.
 ENDPOINT_TIMER_GET = "ACGetAirconTimerNewProtocol"
-ENDPOINT_TIMER_SET = "ACSetAirconTimerNewProtocol"
 ENDPOINT_FIX_STATUS_GET = "ACGetAirconFixTimeStatusInfo"
 ENDPOINT_FIX_STATUS_SET = "ACSetAirconFixTimeStatusInfo"
 
@@ -59,11 +63,10 @@ ENDPOINT_FW_VERSION = "ACDevGetFwVersion"
 ENDPOINT_OTA_PERCENT = "ACDevGetOTAPercent"
 ENDPOINT_HELP_ERROR = "ACDevGetHelpAndErrorInfo"
 ENDPOINT_MASTER_USER = "ACDevGetMasterUser"
-ENDPOINT_ALL_DEVICES = "ACGetAllAirconListCommon"
 ENDPOINT_DEV_NAME = "DevGetName"
 
 # Firmware/help/master-user data barely changes; cache it instead of hitting
-# six extra cloud endpoints on every 60s auxiliary poll.
+# five extra cloud endpoints on every 60s auxiliary poll.
 DEVICE_META_TTL = 1800
 
 # The official web app sends buzzer=65 with EVERY command (BUZZER:{ON:65}).
@@ -84,7 +87,6 @@ SUCCESS_ERROR_CODES = {None, "", 0, "0", "0000"}
 
 FAN_MIN = "Min"
 FAN_MAX = "Max"
-FAN_MUTE = "Quiet"
 
 SWING_AUTO = "Auto"
 SWING_UP = "Up"
@@ -98,50 +100,14 @@ SWING_CENTER = "Center"
 SWING_RIGHT_MIDDLE = "Right Middle"
 SWING_RIGHT = "Right"
 
-# Writable fields of the old CZ-RD501DW2 ducted-controller protocol.
-# Kept verbatim so the legacy profile keeps working.
-LEGACY_SAFE_KEYS = [
-    "runMode", "forceRunning", "runStatus", "remoteForbidMode", "remoteMode",
-    "setTemperature", "setHumidity", "windSet", "exchangeWindSet",
-    "portraitWindSet", "orientationWindSet", "nanoeG", "nanoe", "ecoMode",
-    "muteMode", "filterReset", "powerful", "powerfulMode", "thermoMode",
-    "buzzer", "autoRunMode", "unusualPresent", "runForbidden",
-    "inhaleTemperature", "outsideTemperature", "insideHumidity", "alarmCode",
-    "nanoeModule", "TDWindModule", "airSupply", "autoAi", "cleanMode",
-    "debugMode", "defrost", "detectMode", "displaySet", "douleTemperature",
-    "errorStatus", "eClean", "eeconfirm", "electricCurrent", "energySaving",
-    "enventSet", "errorCode", "errorCodeW", "feelMode", "functionMode",
-    "gasValue", "hcount", "heatExchange", "heatPump", "heatup", "humidClean",
-    "humiditySet", "insideTemperature", "ionMode", "lamp", "mcount", "mildew",
-    "newair", "notice", "pm2p5Clean", "preMode", "preTemperature", "quickMode",
-    "rader", "ratedPower", "selfClean", "selfNanoe", "selfNanoeMode",
-    "selfcleanReset", "showMode", "sleep", "sleepCurve", "sleepMode",
-    "temperature", "temperatureSet", "temperatureUnit", "tempMode",
-    "timerSetting", "totalElectricity", "waterClean", "windDirection",
-    "windMethod", "windMode", "windSwing",
-]
-
-# Backwards-compatible name; api.py now uses the per-profile "safe_keys".
-SAFE_KEYS = LEGACY_SAFE_KEYS
-
-# Verified against a live CS-ZY35K410 status bean (2026-11-06):
-# the 11 official PARAMS keys plus the capability-gated feature switches that
-# are actually present in the status bean.  Capability flags (*Ex), read-only
-# diagnostics (alarmCode, inhaleTemperature, airVersion, e017f, *Type) and
-# one-shot commands (filterReset) are deliberately excluded from the echo.
-AIRCONCOMMON_SAFE_KEYS = [
-    "buzzer", "runStatus", "setTemperature", "runMode", "windSet",
-    "portraitWindSet", "orientationWindSet", "cleanSet", "ervWind",
-    "ervMode", "scene", "cool", "highCool", "elecHeat", "lamp", "uvc",
-    "voiceSet", "spaceClean", "nanoe", "nanoeX", "sleep", "outDehumid",
-    "preAirconMode", "o2Set",
-]
+# ACDevSetStatusNewProtocol is incremental: a command carries only the
+# changed fields.  No read-modify-write whitelist is needed.
 
 # Status-bean sensors (15s coordinator).
 # inhaleTemperature is a sentinel (128) on the CS-ZY35K410: the unit never
 # reports a real return-air temperature, so the sensor would stay "unknown"
-# forever.  Keep the definition for other models but do not register it by
-# default; it can be re-enabled from the HA entity registry if needed.
+# forever.  The definition is kept but disabled by default; it can be
+# re-enabled from the HA entity registry if needed.
 STATUS_SENSORS = [
     {
         "key": "inhale_temperature",
@@ -363,205 +329,140 @@ RUN_MODE_COLORS = {
     69: ("#7056DC", "紫色", "送风"),
 }
 
-# Full "MorePage" feature list of the official AirconCommon web app.
-# Kept as documentation for the follow-up pass; each feature is gated by the
-# matching "*Ex" capability flag in commonStatus.  Values still need to be
-# confirmed against a live status bean before being turned into entities.
-MOREPAGE_FEATURES = [
-    "nanoeX", "cool", "highCool", "highWarm", "dehumid", "outDehumid",
-    "sleep", "easySleep", "led", "elecHeat", "dry", "voiceSet",
-    "spaceClean", "cleanSet", "lamp", "o2Set", "uvc", "rd",
-    "aidSleep", "aidSleepRes",
-]
-MOREPAGE_CAPABILITIES = [
-    "nanoeEx", "coolEx", "highCoolEx", "highWarmEx", "dehumidEx",
-    "outDehumidEx", "sleepEx", "easySleepEx", "lightEx", "elecHeatEx",
-    "dryEx", "voiceSetEx", "cleanSetEx", "lampEx", "o2SetEx", "uvcEx",
-    "aidSleepEx",
-]
+# Feature availability is gated by the matching "*Ex" capability flag in
+# commonStatus, exactly as the official web app's MorePage does.
 
-SUPPORTED_CONTROLLERS = {
-    "CZ-RD501DW2": {
-        "name": "Panasonic ducted controller CZ-RD501DW2",
-        "safe_keys": LEGACY_SAFE_KEYS,
-        "temp_scale": 2,
-        "temperature_keys": ["setTemperature"],
-        "current_temperature_keys": [
-            "inhaleTemperature", "insideTemperature", "preTemperature",
-        ],
-        "power_on_value": 1,
-        "power_off_value": 0,
-        "hvac_mapping": {
-            HVACMode.COOL: 3,
-            HVACMode.HEAT: 4,
-            HVACMode.DRY: 2,
-            HVACMode.AUTO: 0,
-        },
-        "fan_mapping": {
-            FAN_AUTO: 10,
-            FAN_MIN: 3,
-            FAN_LOW: 4,
-            FAN_MEDIUM: 5,
-            FAN_HIGH: 6,
-            FAN_MAX: 7,
-        },
-        "fan_payload_overrides": {
-            FAN_MUTE: {"windSet": 10, "muteMode": 1}
-        },
-        "vertical_swing_mapping": {SWING_AUTO: 15},
-        "horizontal_swing_mapping": {SWING_AUTO: 13},
-        "remote_switches": [
-            {"key": "runStatus", "name": "Power", "on": 1, "off": 0},
-            {"key": "muteMode", "name": "Quiet", "on": 1, "off": 0},
-            {"key": "powerful", "name": "Powerful", "on": 1, "off": 0},
-            {"key": "ecoMode", "name": "Eco", "on": 1, "off": 0},
-            {"key": "nanoe", "name": "Nanoe", "on": 1, "off": 0},
-            {"key": "nanoeG", "name": "Nanoe-G", "on": 1, "off": 0},
-            {"key": "buzzer", "name": "Buzzer", "on": 1, "off": 0},
-        ],
-        "remote_buttons": [
-            {"key": "runStatus", "name": "Power Toggle", "toggle": True},
-            {"key": "filterReset", "name": "Filter Reset", "press": 1},
-        ],
-        "remote_selects": [],
-        "status_sensors": [],
-        "aux_sensors": [],
-        "binary_sensors": [],
+# The one and only supported device profile.  Kept as a plain dict so all
+# entity platforms stay data-driven; there is no model selection or fallback.
+DEVICE_PROFILE = {
+    "name": "Panasonic CS-ZY35K410 (AirconCommon)",
+    # Verified live 2026-11-06: tempType=0 -> x1, 1.0 C steps.
+    "temp_scale": 1,
+    "temperature_keys": ["setTemperature", "temperatureSet", "temperature"],
+    "current_temperature_keys": [
+        "inhaleTemperature", "insideTemperature", "preTemperature",
+        "douleTemperature",
+    ],
+    "power_on_value": 48,
+    "power_off_value": 49,
+    "hvac_mapping": {
+        HVACMode.AUTO: 65,
+        HVACMode.COOL: 66,
+        HVACMode.HEAT: 67,
+        HVACMode.DRY: 68,
+        HVACMode.FAN_ONLY: 69,
     },
-    "CS-ZY35K410": {
-        "name": "Panasonic CS-ZY35K410 (AirconCommon)",
-        "set_url": f"{URL_BASE}/ACDevSetStatusNewProtocol",
-        "safe_keys": AIRCONCOMMON_SAFE_KEYS,
-        # Community reports disagree on the temperature scale (1 vs 2).
-        # api.py auto-detects from the live value; this is the default.
-        "temp_scale": 1,
-        "temperature_keys": ["setTemperature", "temperatureSet", "temperature"],
-        "current_temperature_keys": [
-            "inhaleTemperature", "insideTemperature", "preTemperature",
-            "douleTemperature",
-        ],
-        "power_on_value": 48,
-        "power_off_value": 49,
-        "hvac_mapping": {
-            HVACMode.AUTO: 65,
-            HVACMode.COOL: 66,
-            HVACMode.HEAT: 67,
-            HVACMode.DRY: 68,
-            HVACMode.FAN_ONLY: 69,
-        },
-        "fan_mapping": {
-            FAN_AUTO: 65,
-            FAN_MIN: 49,
-            FAN_LOW: 50,
-            FAN_MEDIUM: 52,
-            FAN_HIGH: 54,
-            FAN_MAX: 55,
-        },
-        "fan_payload_overrides": {},
-        "horizontal_swing_mapping": {
-            SWING_AUTO: 64,
-            SWING_LEFT: 66,
-            SWING_LEFT_MIDDLE: 108,
-            SWING_CENTER: 67,
-            SWING_RIGHT_MIDDLE: 87,
-            SWING_RIGHT: 65,
-        },
-        "vertical_swing_mapping": {
-            SWING_AUTO: 70,
-            SWING_UP: 65,
-            SWING_UP_MIDDLE: 68,
-            SWING_MIDDLE: 67,
-            SWING_DOWN_MIDDLE: 69,
-            SWING_DOWN: 66,
-        },
-        # "key" is kept stable for entity unique_id compatibility; "aliases"
-        # point at the real AirconCommon field when the legacy name differs.
-        # "capability" is the official *Ex flag gating the feature.
-        "remote_switches": [
-            {"key": "runStatus", "name": "电源", "on": 48, "off": 49},
-            {
-                "key": "powerful", "aliases": ["highCool"],
-                "capability": "highCoolEx", "name": "强劲运转",
-                "on": 1, "off": 0,
-            },
-            {
-                "key": "selfClean", "aliases": ["cleanSet"],
-                "capability": "cleanSetEx", "name": "自清洁",
-                "on": 1, "off": 0,
-            },
-            {
-                "key": "cool", "capability": "coolEx", "name": "柔湿制冷",
-                "on": 1, "off": 0,
-            },
-            {
-                "key": "elecHeat", "capability": "elecHeatEx", "name": "辅热",
-                "on": 1, "off": 0,
-            },
-            {
-                "key": "nanoe", "capability": "nanoeEx", "name": "纳诺怡",
-                "on": 1, "off": 0,
-            },
-            {
-                "key": "sleep", "capability": "sleepEx", "name": "睡眠",
-                "on": 1, "off": 0,
-            },
-            # lamp is inverted by the AirconCommon protocol: 0 = light ON.
-            {
-                "key": "lamp", "capability": "lampEx", "name": "显示灯",
-                "on": 0, "off": 1,
-            },
-            {
-                "key": "spaceClean", "capability": "spaceCleanEx",
-                "name": "空间净化", "on": 1, "off": 0,
-            },
-            # uvc / voiceSet deliberately removed: the live status bean of
-            # this CS-ZY35K410 reports uvcEx=0 and voiceSetEx=0, and neither
-            # "uvc" nor "voiceSet" field is present.  spaceClean IS supported
-            # (spaceCleanEx=1) and stays.
-            # buzzer is intentionally absent: the App sends a fixed
-            # buzzer=65 on every command (COMMAND_BUZZER), it is not a toggle.
-        ],
-        "remote_buttons": [
-            {"key": "runStatus", "name": "电源切换", "toggle": True},
-            # The AirconCommon H5 resets the filter with {"filter": 1};
-            # filterReset is the legacy ducted-controller name kept in the
-            # status bean.  Send both so either firmware generation reacts.
-            {
-                "key": "filterReset", "name": "滤网复位", "press": 1,
-                "payload": {"filter": 1, "filterReset": 1},
-            },
-        ],
-        "remote_selects": [
-            {
-                "key": "scene", "name": "场景",
-                "options": {"关闭": 64, "怡静风": 65, "超远风": 66, "环抱风": 67},
-            },
-            {
-                "key": "portraitWindSet", "name": "上下扫风位置",
-                "options": {
-                    "自动": 70, "方向1": 65, "方向2": 68, "方向3": 67,
-                    "方向4": 69, "方向5": 66,
-                },
-            },
-            {
-                "key": "orientationWindSet", "name": "左右扫风位置",
-                "capability": "leftType",
-                "options": {
-                    "自动": 64, "最左": 66, "偏左": 108, "正对": 67,
-                    "偏右": 87, "最右": 65,
-                },
-            },
-            # Removed displaySet / sleepMode / powerfulMode / cleanMode:
-            # none exist in the official AirconCommon bundles or in the live
-            # status bean; they were legacy 1.1.0 ducted-controller names.
-        ],
-        "status_sensors": STATUS_SENSORS,
-        "aux_sensors": AUX_SENSORS,
-        "binary_sensors": BINARY_SENSORS,
-        "charge_number": CHARGE_NUMBER,
-        "timer_switch": TIMER_SWITCH,
-        "timer_sensor": TIMER_SENSOR,
-        "hourly_sensor": HOURLY_ENERGY_SENSOR,
-        "device_info_sensor": DEVICE_INFO_SENSOR,
+    "fan_mapping": {
+        FAN_AUTO: 65,
+        FAN_MIN: 49,
+        FAN_LOW: 50,
+        FAN_MEDIUM: 52,
+        FAN_HIGH: 54,
+        FAN_MAX: 55,
     },
+    "horizontal_swing_mapping": {
+        SWING_AUTO: 64,
+        SWING_LEFT: 66,
+        SWING_LEFT_MIDDLE: 108,
+        SWING_CENTER: 67,
+        SWING_RIGHT_MIDDLE: 87,
+        SWING_RIGHT: 65,
+    },
+    "vertical_swing_mapping": {
+        SWING_AUTO: 70,
+        SWING_UP: 65,
+        SWING_UP_MIDDLE: 68,
+        SWING_MIDDLE: 67,
+        SWING_DOWN_MIDDLE: 69,
+        SWING_DOWN: 66,
+    },
+    # "key" is kept stable for entity unique_id compatibility; "aliases"
+    # point at the real AirconCommon field when the legacy name differs.
+    # "capability" is the official *Ex flag gating the feature.
+    "remote_switches": [
+        {"key": "runStatus", "name": "电源", "on": 48, "off": 49},
+        {
+            "key": "powerful", "aliases": ["highCool"],
+            "capability": "highCoolEx", "name": "强劲运转",
+            "on": 1, "off": 0,
+        },
+        {
+            "key": "selfClean", "aliases": ["cleanSet"],
+            "capability": "cleanSetEx", "name": "自清洁",
+            "on": 1, "off": 0,
+        },
+        {
+            "key": "cool", "capability": "coolEx", "name": "柔湿制冷",
+            "on": 1, "off": 0,
+        },
+        {
+            "key": "elecHeat", "capability": "elecHeatEx", "name": "辅热",
+            "on": 1, "off": 0,
+        },
+        {
+            "key": "nanoe", "capability": "nanoeEx", "name": "纳诺怡",
+            "on": 1, "off": 0,
+        },
+        {
+            "key": "sleep", "capability": "sleepEx", "name": "睡眠",
+            "on": 1, "off": 0,
+        },
+    # lamp is inverted (0 = light ON), confirmed on the live unit 2026-11-06.
+        {
+            "key": "lamp", "capability": "lampEx", "name": "显示灯",
+            "on": 0, "off": 1,
+        },
+        {
+            "key": "spaceClean", "capability": "spaceCleanEx",
+            "name": "空间净化", "on": 1, "off": 0,
+        },
+        # uvc / voiceSet deliberately removed: the live status bean of
+        # this CS-ZY35K410 reports uvcEx=0 and voiceSetEx=0, and neither
+        # "uvc" nor "voiceSet" field is present.  spaceClean IS supported
+        # (spaceCleanEx=1) and stays.
+        # buzzer is intentionally absent: the App sends a fixed
+        # buzzer=65 on every command (COMMAND_BUZZER), it is not a toggle.
+    ],
+    "remote_buttons": [
+        {"key": "runStatus", "name": "电源切换", "toggle": True},
+        # The AirconCommon H5 resets the filter with {"filter": 1};
+        # filterReset is the older field name still present in the status
+        # bean.  Send both so the command is not ignored.
+        {
+            "key": "filterReset", "name": "滤网复位", "press": 1,
+            "payload": {"filter": 1, "filterReset": 1},
+        },
+    ],
+    "remote_selects": [
+        {
+            "key": "scene", "name": "场景",
+            "options": {"关闭": 64, "怡静风": 65, "超远风": 66, "环抱风": 67},
+        },
+        {
+            "key": "portraitWindSet", "name": "上下扫风位置",
+            "options": {
+                "自动": 70, "方向1": 65, "方向2": 68, "方向3": 67,
+                "方向4": 69, "方向5": 66,
+            },
+        },
+        {
+            "key": "orientationWindSet", "name": "左右扫风位置",
+            "capability": "leftType",
+            "options": {
+                "自动": 64, "最左": 66, "偏左": 108, "正对": 67,
+                "偏右": 87, "最右": 65,
+            },
+        },
+        # Removed displaySet / sleepMode / powerfulMode / cleanMode:
+        # none exist in the official AirconCommon bundles or in the live
+        # status bean; they were legacy 1.1.0 ducted-controller names.
+    ],
+    "status_sensors": STATUS_SENSORS,
+    "aux_sensors": AUX_SENSORS,
+    "binary_sensors": BINARY_SENSORS,
+    "charge_number": CHARGE_NUMBER,
+    "timer_switch": TIMER_SWITCH,
+    "timer_sensor": TIMER_SENSOR,
+    "hourly_sensor": HOURLY_ENERGY_SENSOR,
+    "device_info_sensor": DEVICE_INFO_SENSOR,
 }

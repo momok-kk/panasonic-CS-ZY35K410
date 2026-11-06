@@ -22,7 +22,6 @@ from .api import PanasonicApiError
 from .const import (
     CONF_SENSOR_ID,
     DOMAIN,
-    FAN_MUTE,
     MODE_COLOR_OFF,
     NO_EXTERNAL_SENSOR,
     RUN_MODE_COLORS,
@@ -64,7 +63,6 @@ class PanasonicACEntity(CoordinatorEntity, ClimateEntity):
 
         self._hvac_map = self._profile.get("hvac_mapping", {})
         self._fan_map = self._profile.get("fan_mapping", {})
-        self._fan_overrides = self._profile.get("fan_payload_overrides", {})
         self._vertical_swing_map = self._profile.get("vertical_swing_mapping", {})
         self._horizontal_swing_map = self._profile.get("horizontal_swing_mapping", {})
 
@@ -138,11 +136,7 @@ class PanasonicACEntity(CoordinatorEntity, ClimateEntity):
 
     @property
     def fan_modes(self):
-        modes = list(self._fan_map.keys())
-        for mode in self._fan_overrides:
-            if mode not in modes:
-                modes.append(mode)
-        return modes
+        return list(self._fan_map.keys())
 
     @property
     def fan_mode(self):
@@ -221,16 +215,9 @@ class PanasonicACEntity(CoordinatorEntity, ClimateEntity):
         self._hvac_mode = self._mode_from_value(
             self._hvac_map, res.get("runMode"), self._hvac_mode
         )
-        if (
-            res.get("windSet") == 10
-            and res.get("muteMode") == 1
-            and FAN_MUTE in self._fan_overrides
-        ):
-            self._fan_mode = FAN_MUTE
-        else:
-            self._fan_mode = self._mode_from_value(
-                self._fan_map, res.get("windSet"), self._fan_mode
-            )
+        self._fan_mode = self._mode_from_value(
+            self._fan_map, res.get("windSet"), self._fan_mode
+        )
         self._swing_mode = self._mode_from_value(
             self._vertical_swing_map, res.get("portraitWindSet"), self._swing_mode
         )
@@ -259,17 +246,11 @@ class PanasonicACEntity(CoordinatorEntity, ClimateEntity):
         await self._send_command(self._device.build_temperature_payload(temp))
 
     async def async_set_fan_mode(self, fan_mode):
-        if fan_mode in self._fan_overrides:
-            changes = self._fan_overrides[fan_mode].copy()
-        else:
-            val = self._fan_map.get(fan_mode)
-            if val is None:
-                _LOGGER.warning("Unsupported fan mode requested: %s", fan_mode)
-                return
-            changes = {"windSet": val}
-            if FAN_MUTE in self._fan_overrides:
-                changes["muteMode"] = 0
-        await self._send_command(changes)
+        val = self._fan_map.get(fan_mode)
+        if val is None:
+            _LOGGER.warning("Unsupported fan mode requested: %s", fan_mode)
+            return
+        await self._send_command({"windSet": val})
 
     async def async_set_swing_mode(self, swing_mode):
         val = self._vertical_swing_map.get(swing_mode)

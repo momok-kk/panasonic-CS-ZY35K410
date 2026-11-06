@@ -1,4 +1,4 @@
-"""Cloud API client for Panasonic Smart China (ZY / AirconCommon)."""
+"""Cloud API client for the Panasonic CS-ZY35K410 (AirconCommon)."""
 
 from __future__ import annotations
 
@@ -12,13 +12,13 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .const import (
     AUTH_ERROR_CODES,
     COMMAND_BUZZER,
-    CONF_CONTROLLER_MODEL,
     CONF_DEVICE_ID,
     CONF_SSID,
     CONF_TOKEN,
     CONF_USR_ID,
     DEVICE_META_TTL,
-    ENDPOINT_ALL_DEVICES,
+    DEVICE_MODEL,
+    DEVICE_PROFILE,
     ENDPOINT_CHARGE_GET,
     ENDPOINT_CHARGE_SET,
     ENDPOINT_DAY_GRAPH,
@@ -35,9 +35,7 @@ from .const import (
     ENDPOINT_MONTH_GRAPH,
     ENDPOINT_OTA_PERCENT,
     ENDPOINT_TIMER_GET,
-    SAFE_KEYS,
     SUCCESS_ERROR_CODES,
-    SUPPORTED_CONTROLLERS,
     TRANSIENT_COMMAND_KEYS,
     URL_BASE,
     URL_GET,
@@ -86,7 +84,6 @@ STATIC_ENDPOINTS = {
     "help": (ENDPOINT_HELP_ERROR, None),
     "master_user": (ENDPOINT_MASTER_USER, None),
     "dev_name": (ENDPOINT_DEV_NAME, None),
-    "all_devices": (ENDPOINT_ALL_DEVICES, lambda: {"type": 4}),
 }
 
 
@@ -109,22 +106,11 @@ class PanasonicSmartDevice:
         self.ssid = config[CONF_SSID]
         self.name = name
 
-        model = config.get(CONF_CONTROLLER_MODEL, "CZ-RD501DW2")
-        # Fall back to the device id suffix; the device name does not
-        # necessarily contain the model number (e.g. "卧室空调").
-        if model == "CZ-RD501DW2":
-            if "CS-ZY35K410" in name.upper() or "CS-ZY35K410" in self.device_id.upper():
-                model = "CS-ZY35K410"
-
-        self.model = model
-        self.profile = SUPPORTED_CONTROLLERS.get(model)
-        if not self.profile:
-            _LOGGER.error("Controller model %s not found, using default.", model)
-            self.profile = SUPPORTED_CONTROLLERS["CZ-RD501DW2"]
-
-        self.safe_keys = set(self.profile.get("safe_keys", SAFE_KEYS))
-        self.url_get = self.profile.get("get_url", URL_GET)
-        self.url_set = self.profile.get("set_url", URL_SET)
+        # Only the CS-ZY35K410 is supported: no model detection or fallback.
+        self.model = DEVICE_MODEL
+        self.profile = DEVICE_PROFILE
+        self.url_get = URL_GET
+        self.url_set = URL_SET
         self.last_params = {}
         self._coordinator = None
         # Set from the live setTemperature value; shared with temperature sensors.
@@ -138,26 +124,23 @@ class PanasonicSmartDevice:
 
     @property
     def power_on_value(self):
-        return self.profile.get("power_on_value", 1)
+        return DEVICE_PROFILE["power_on_value"]
 
     @property
     def power_off_value(self):
-        return self.profile.get("power_off_value", 0)
+        return DEVICE_PROFILE["power_off_value"]
 
     @property
     def temp_scale(self):
-        return self.profile.get("temp_scale", 2)
+        return DEVICE_PROFILE["temp_scale"]
 
     @property
     def temperature_keys(self):
-        return self.profile.get("temperature_keys", ["setTemperature"])
+        return DEVICE_PROFILE["temperature_keys"]
 
     @property
     def current_temperature_keys(self):
-        return self.profile.get(
-            "current_temperature_keys",
-            ["inhaleTemperature", "insideTemperature", "preTemperature"],
-        )
+        return DEVICE_PROFILE["current_temperature_keys"]
 
     def is_on(self, params):
         return params.get("runStatus") == self.power_on_value
@@ -289,7 +272,7 @@ class PanasonicSmartDevice:
     async def fetch_device_meta(self):
         """Fetch firmware/OTA/help/owner data, cached for DEVICE_META_TTL.
 
-        All six endpoints were verified on a live CS-ZY35K410.  Note that
+        All five endpoints were verified on a live CS-ZY35K410.  Note that
         ACDevGetMasterUser returns its payload at the top level instead of
         inside "results", so both response shapes are accepted.
         """
@@ -322,16 +305,11 @@ class PanasonicSmartDevice:
         help_links = raw.get("help") or {}
         name = raw.get("dev_name") or {}
         owner = raw.get("master_user") or {}
-        devices = raw.get("all_devices") or {}
-        all_info = devices.get("allInfo")
         meta = {
             "version": fw.get("version"),
             "ota_percent": ota.get("otaUpgradePer"),
             "device_name": name.get("deviceName"),
             "master_user": owner.get("masterUser"),
-            "device_count": (
-                len(all_info) if isinstance(all_info, list) else None
-            ),
             "help_links": help_links.get("help"),
             "error_links": help_links.get("error"),
             "problem_links": help_links.get("problem"),
@@ -375,12 +353,8 @@ class PanasonicSmartDevice:
         ACDevSetStatusNewProtocol is incremental: the official H5 calls
         setStatusInfoAWByOne({"portraitWindSet": 65}) and every other field
         is preserved by the device.  Verified on a live CS-ZY35K410
-        (todoId 327/328/329, status diff empty).  The legacy CZ-RD501DW2
-        endpoint still requires the full read-modify-write echo.
+        (todoId 327/328/329, status diff empty).
         """
-        if "NewProtocol" not in self.url_set:
-            return await self._send_command_legacy(changes)
-
         params = dict(changes)
         params["buzzer"] = COMMAND_BUZZER
         await self._post(
@@ -409,45 +383,6 @@ class PanasonicSmartDevice:
         if self._coordinator is not None:
             self._coordinator.async_set_updated_data(current)
         return current
-
-    async def _send_command_legacy(self, changes):
-        """Read-modify-write for the old ACDevSetStatusInfoAW protocol."""
-        latest = await self.fetch_status()
-        if not latest and self._coordinator is not None:
-            latest = self._coordinator.data
-        if not latest:
-            raise PanasonicApiError("Cannot read current status; command refused")
-
-        current_params = dict(latest)
-        current_params.update(changes)
-        params = {
-            key: value
-            for key, value in current_params.items()
-            if key in self.safe_keys
-        }
-        # Explicit commands (e.g. filterReset, scene presets) are always
-        # forwarded even when they are not part of the status bean whitelist.
-        params.update(changes)
-        # The official App stamps buzzer=65 on every NewProtocol command.
-        # It is a per-command beep marker, not a persistent state to echo.
-        if "NewProtocol" in self.url_set:
-            params["buzzer"] = COMMAND_BUZZER
-
-        await self._post(
-            self.url_set,
-            {
-                "id": 200,
-                "usrId": self.usr_id,
-                "deviceId": self.device_id,
-                "token": self.token,
-                "params": params,
-            },
-        )
-
-        self.last_params = current_params
-        if self._coordinator is not None:
-            self._coordinator.async_set_updated_data(current_params)
-        return current_params
 
     def _get_headers(self):
         return {

@@ -8,9 +8,8 @@ from homeassistant.helpers.selector import EntitySelector, EntitySelectorConfig
 from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
 
 from .const import (
-    DOMAIN, CONF_USR_ID, CONF_DEVICE_ID, CONF_TOKEN, 
-    CONF_SSID, CONF_SENSOR_ID, CONF_CONTROLLER_MODEL,
-    NO_EXTERNAL_SENSOR, SUPPORTED_CONTROLLERS
+    DOMAIN, CONF_USR_ID, CONF_DEVICE_ID, CONF_TOKEN,
+    CONF_SSID, CONF_SENSOR_ID, DEVICE_CATEGORY, NO_EXTERNAL_SENSOR,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -18,6 +17,13 @@ _LOGGER = logging.getLogger(__name__)
 URL_LOGIN = "https://app.psmartcloud.com/App/UsrLogin"
 URL_GET_DEV = "https://app.psmartcloud.com/App/UsrGetBindDevInfo"
 URL_GET_TOKEN = "https://app.psmartcloud.com/App/UsrGetToken"
+
+
+def _is_supported_device(device_id):
+    """Only AirconCommon air conditioners (category 0900) are accepted."""
+    parts = str(device_id).upper().split("_")
+    return len(parts) == 3 and parts[1] == DEVICE_CATEGORY
+
 
 class PanasonicConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
@@ -170,23 +176,13 @@ class PanasonicConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_DEVICE_ID: selected_dev_id,
                         CONF_TOKEN: token,
                         CONF_SENSOR_ID: user_input.get(CONF_SENSOR_ID, NO_EXTERNAL_SENSOR),
-                        CONF_CONTROLLER_MODEL: user_input[CONF_CONTROLLER_MODEL], 
                     }
                 )
-
-        # 构建控制器列表；设备 ID 后缀带型号时自动选中对应 profile
-        controller_options = {k: v["name"] for k, v in SUPPORTED_CONTROLLERS.items()}
-        default_model = "CZ-RD501DW2"
-        if self._devices and all(
-            "CS-ZY35K410" in did.upper() for did in self._devices
-        ):
-            default_model = "CS-ZY35K410"
 
         return self.async_show_form(
             step_id="device",
             data_schema=vol.Schema({
                 vol.Required(CONF_DEVICE_ID): vol.In(available_devices),
-                vol.Required(CONF_CONTROLLER_MODEL, default=default_model): vol.In(controller_options),
                 vol.Optional(CONF_SENSOR_ID): EntitySelector(
                     EntitySelectorConfig(domain="sensor")
                 ),
@@ -221,7 +217,8 @@ class PanasonicConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     
                     devices = {}
                     for dev in dev_res['results']['devList']:
-                        devices[dev['deviceId']] = dev['params']
+                        if _is_supported_device(dev.get('deviceId', '')):
+                            devices[dev['deviceId']] = dev['params']
                     return devices
         except:
             return None
@@ -271,19 +268,16 @@ class PanasonicConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 devices = {}
                 if 'results' in dev_res and 'devList' in dev_res['results']:
                     for dev in dev_res['results']['devList']:
-                        devices[dev['deviceId']] = dev['params']
+                        if _is_supported_device(dev.get('deviceId', '')):
+                            devices[dev['deviceId']] = dev['params']
                 return real_usr_id, ssid, devices
 
     def _generate_token(self, device_id):
-        """
-        Generate SHA512 token from device_id.
-        
-        Supports multiple device types with different category codes:
-        - Air conditioner (空调): _0900_
-        - Washing machine (洗衣机): _0600_
-        - Other devices: dynamically detected from deviceId format
-        
-        deviceId format: MAC_CATEGORY_SUFFIX (e.g., A1B2C3D4E5F6_0900_1234)
+        """Derive the device token from an AirconCommon deviceId.
+
+        deviceId is MAC_CATEGORY_MODEL, e.g. B812DAC81168_0900_CS-ZY35K410.
+        stoken = MAC[6:] + '_' + category + '_' + MAC[:6]
+        token  = sha512(sha512(stoken) + '_' + model)
         """
         try:
             did = device_id.upper()
@@ -296,12 +290,16 @@ class PanasonicConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return None
             
             mac_part = parts[0]      # e.g., "A1B2C3D4E5F6" (12-char MAC)
-            category = parts[1]       # e.g., "0900" or "0600"
+            category = parts[1]       # always "0900" (AirconCommon)
             suffix = parts[2]         # e.g., "1234"
             
             # Validate MAC part length (should be 12 characters for standard MAC)
             if len(mac_part) < 6:
                 _LOGGER.error("Invalid MAC part in deviceId: %s", device_id)
+                return None
+
+            if category != DEVICE_CATEGORY:
+                _LOGGER.error("Unsupported device category: %s", category)
                 return None
             
             # Generate stoken: last 6 chars + '_CATEGORY_' + first 6 chars

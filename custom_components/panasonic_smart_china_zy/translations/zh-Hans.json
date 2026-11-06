@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "登录松下账号",
-        "description": "请输入您的松下智能家电 App (中国版) 账号密码。\n首次登录会自动保存会话，添加后续设备时无需再次输入。",
+        "description": "请输入您的松下智能家电 App (中国版) 账号密码。\n首次登录会自动保存会话；会话过期时可在重新认证流程中刷新，设备与实体不会改变。",
         "data": {
           "username": "手机号",
           "password": "密码"
@@ -11,10 +11,9 @@
       },
       "device": {
         "title": "配置设备",
-        "description": "成功获取设备列表！请选择要添加的空调及相关配置。",
+        "description": "成功获取设备列表！本集成仅支持 CS-ZY35K410（AirconCommon），请选择要添加的空调。",
         "data": {
           "deviceId": "选择空调设备",
-          "controller_model": "线控器/遥控器型号",
           "sensor_entity_id": "关联室温传感器 (可选)"
         }
       },

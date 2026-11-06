@@ -1,9 +1,9 @@
 # Panasonic Smart China ZY Custom for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-[![version](https://img.shields.io/badge/version-2.3.1-blue.svg)]()
+[![version](https://img.shields.io/badge/version-2.4.0-blue.svg)]()
 
-面向中国区「松下智能家电」App 的 Home Assistant 自定义集成，重点适配 **CS-ZY35K410**（洵风系列，2024 AirconCommon 新协议）。域名 `panasonic_smart_china_zy`，不与原版 `panasonic_smart_china` 冲突。
+面向中国区「松下智能家电」App 的 Home Assistant 自定义集成，**仅适配 CS-ZY35K410**（洵风系列，2024 AirconCommon 新协议，设备类别 `0900`）；2.4.0 起不再兼容其它机型或设备类别。域名 `panasonic_smart_china_zy`，不与原版 `panasonic_smart_china` 冲突。
 
 ## 协议依据
 
@@ -13,24 +13,24 @@
 | `ACDevGetStatusInfoAW` / `ACDevSetStatusNewProtocol` | 状态读取 / 控制端点 |
 | 瀚思彼岸论坛 17153 帖 43# | `runStatus` 48/49、`runMode` 65–69、风速与扫风枚举的实测记录 |
 | `panasonic_smart_china` v3.0.0 `profiles/split_ac_0900_airconcommon.py` | 同一协议的社区逆向成果，用于校验能力门控与用电统计端点 |
-| **本机实机状态（2026-11-06）** | 温度刻度、`*Ex` 能力位、9 个辅助端点与 6 个元数据端点的返回结构均经真实响应核对 |
+| **本机实机状态（2026-11-06）** | 温度刻度、`*Ex` 能力位、9 个辅助端点与 5 个元数据端点的返回结构均经真实响应核对 |
 
 设备 token 由 `deviceId` 经双重 SHA-512 推导，已对本机实测值校验一致，**无需抓包，也无需反编译 APK**。
 
-## 本次更新接入了什么（1.x → 2.3.1）
+## 本次更新接入了什么（1.x → 2.4.0）
 
-这一轮不是「多接几个实体」，而是拿官方 H5 主包 + 26 个懒加载 chunk 的完整字段字典，配合本机真实云端响应把协议重新对齐：**运行期从状态读/写扩展到 20 个云端端点（16 读 / 4 写，其中 1 个写端点仅供旧机型兼容）**；实体从字段错配、各自轮询，重整为 **7 个平台 / 35 个定义 / 33 个默认可见**；能拿到但不需要用户操作的数据一律做成属性。
+这一轮不是「多接几个实体」，而是拿官方 H5 主包 + 26 个懒加载 chunk 的完整字段字典，配合本机真实云端响应把协议重新对齐，最后在 2.4.0 收敛为单型号专用：**运行期覆盖 18 个云端端点（15 读 / 3 写），另有 2 个登录端点**；实体从字段错配、各自轮询，重整为 **7 个平台 / 35 个定义 / 33 个默认可见**；能拿到但不需要用户操作的数据一律做成属性。
 
 ### 新接入的云端能力
 
 | 类别 | 端点 | 接入内容 | 频率 |
 |---|---|---|---|
-| 状态与控制 | `ACDevGetStatusInfoAW`、`ACDevSetStatusNewProtocol`（旧机型 `ACDevSetStatusInfoAW`） | 开关 / 模式 / 设定温度 / 风速 / 上下与左右扫风 / 场景 / 10 组 `*Ex` 门控开关 / 2 个按钮 | 15s 读，操作时写 |
+| 状态与控制 | `ACDevGetStatusInfoAW`、`ACDevSetStatusNewProtocol` | 开关 / 模式 / 设定温度 / 风速 / 上下与左右扫风 / 场景 / 10 组 `*Ex` 门控开关 / 2 个按钮 | 15s 读，操作时写 |
 | 用电统计 | `ACGetElectricChargeTodayInfo`、`ACGetElectricChargeDaylyInfo`、`ACGetAirconYearGraphInfo` | 今日 / 本月 / 本年电量、电费、运行时长 | 60s |
 | **逐时·逐日曲线** | `ACGetAirconDayGraphInfo`、`ACGetAirconMonthGraphInfo` | 24 点 power / cost / 设定温度、30 天日用电与日费用数组（原本只在 App 图表里） | 60s |
 | 电价与模式记忆 | `ACGetAirconElectricChargeInfo`、`ACSetAirconElectricChargeInfo`、`ACGetModeTempInfo` | 电价可写（本机 0.6 元/kWh）、制冷 / 制暖 / 抽湿记忆温度与风速 | 60s |
 | 定时 | `ACGetAirconTimerNewProtocol`、`ACGetAirconFixTimeStatusInfo`、`ACSetAirconFixTimeStatusInfo` | 每周计划只读展示、定时总开关可写 | 60s |
-| **设备元数据** | `ACDevGetFwVersion`、`ACDevGetOTAPercent`、`ACDevGetHelpAndErrorInfo`、`ACDevGetMasterUser`、`DevGetName`、`ACGetAllAirconListCommon` | 固件版本、OTA 进度、官方帮助 / 故障图、设备名、主用户、全屋设备数 | 30min 客户端缓存 |
+| **设备元数据** | `ACDevGetFwVersion`、`ACDevGetOTAPercent`、`ACDevGetHelpAndErrorInfo`、`ACDevGetMasterUser`、`DevGetName` | 固件版本、OTA 进度、官方帮助 / 故障图、设备名、主用户 | 30min 客户端缓存 |
 | 登录与认证 | `UsrGetBindDevInfo`、`UsrGetToken` | 绑定设备列表、token 推导、会话失效自动触发 HA 重新认证 | 配置 / reauth 时 |
 
 `ACSetAirconTimerNewProtocol`（定时条目写入）虽已确认格式，但**刻意不调用**：误写会静默覆盖 App 里配好的计划。
@@ -41,6 +41,7 @@
 - **属性而非实体**：模式配色、19 个 `*Ex` 能力位、12 项设备诊断、24 点逐时曲线、30 天日曲线、记忆风速、官方帮助图链接，挂在 climate 与已有 sensor 上，不制造「实体多但没用」的噪音。
 - **清理**：删掉 6 个协议里不存在的历史实体（`displaySet` / `sleepMode` / `powerfulMode` / `cleanMode` / `buzzer` / `selfcleanReset`）与 3 个本机型不支持的实体（UVC 除菌 / 语音提示 / 新风运行）；HA 侧清掉 16 条孤儿注册记录；「回风温度」「滤网需更换」2 个无效只读实体改为默认禁用（可随时重新启用）。
 - **写入路径**：新协议改为增量写入（只发变更字段 + `buzzer=65`），滤网复位改为 `filter` + `filterReset` 双发；一次性指令不写入乐观状态，避免误报。
+- **单型号收敛（2.4.0）**：删除第二套控制器 profile 与旧协议写入分支，配置流程仍完整（详见「单型号专用与配置流程」章节）。
 
 ### 实机校准后确定的行为（CS-ZY35K410，2026-11-06）
 
@@ -117,12 +118,12 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 | 位置 | 来源端点 | 内容 |
 |---|---|---|
 | `sensor.…逐时用电` | `ACGetAirconDayGraphInfo` | state = 当前钟点用电量；属性 `hourly_power_kwh` / `hourly_cost_cny` / `hourly_set_temperature`（24 点数组）、`today_total_kwh`、`peak_hour` / `peak_kwh`；温度 `255` = 无读数 |
-| `sensor.…设备信息` | `ACDevGetFwVersion` 等 6 个 | state = 固件版本（实机 `r_2_0_0_1616`）；属性 `ota_percent`、`device_name`、`master_user`、`device_count`、`help_links` / `error_links` / `problem_links`（官方帮助与故障排查图） |
+| `sensor.…设备信息` | `ACDevGetFwVersion` 等 5 个 | state = 固件版本（实机 `r_2_0_0_1616`）；属性 `ota_percent`、`device_name`、`master_user`、`help_links` / `error_links` / `problem_links`（官方帮助与故障排查图） |
 | 记忆温度 3 个 sensor | `ACGetModeTempInfo`（原本就在轮询） | 新增 `wind_set` 属性（50 / 65 / 55），制冷另附 `nanoe_wind_set=65`，零额外请求 |
 | `sensor.…本月用电量` | `ACGetAirconMonthGraphInfo` | 新增 `daily_power_kwh` / `daily_cost_cny`（30 天数组）属性 |
 | `climate` | 状态 bean（原本就在轮询） | 新增 `device_diagnostics`（`airVersion` / `preAirconMode` / `runForbidden` / `unusualPresent` / `e017f` / 各 `*Type`）与 `capabilities`（全部 `*Ex` 能力位）属性 |
 
-固件、OTA、帮助资料、设备名、主用户、全屋设备列表这 6 个端点变化极慢，在客户端缓存 **30 分钟**，不会让 60s 辅助轮询变成每轮十几个请求。逐时/逐日曲线与原有 7 个辅助端点一起按 60s 更新。
+固件、OTA、帮助资料、设备名、主用户这 5 个端点变化极慢，在客户端缓存 **30 分钟**，不会让 60s 辅助轮询变成每轮十几个请求。逐时/逐日曲线与原有 7 个辅助端点一起按 60s 更新。
 
 > 实测已失效、刻意不接：`ACGetAirconWeekGraphInfo` 恒返回 `8191 服务器内部错误`；`ACGetWeatherInfo` 所有省市返回空字段；`ACDevSetOTA` / `DevUnbind` 属危险写操作。`runForbidden` / `unusualPresent` 在官方 App 里**只读**（异常弹窗用），不做成开关。
 
@@ -147,15 +148,38 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 ## 架构
 
 - **单设备单轮询**：所有实体共享一个 `PanasonicStatusCoordinator`（15s）与一个 `PanasonicAuxCoordinator`（60s），不再每个实体各发一次云端请求。
-- **增量写入（2.3.0）**：`ACDevSetStatusNewProtocol` 是增量协议，官方 H5 的 `setStatusInfoAWByOne` 只发单个字段（如 `{"params":{"portraitWindSet":65}}`），设备保留其余状态。实机回写当前值验证返回 `todoId:327/328/329` 且状态 diff 为空，因此集成不再全量回显状态 bean —— 少一次云端读取，也避免把只读诊断值误写回设备。旧 `CZ-RD501DW2` 的 `ACDevSetStatusInfoAW` 仍保留原来的 read-modify-write 白名单逻辑。官方 App 每条指令固定带 `buzzer=65`（提示音标记，非开关），集成同样处理。
+- **增量写入（2.3.0）**：`ACDevSetStatusNewProtocol` 是增量协议，官方 H5 的 `setStatusInfoAWByOne` 只发单个字段（如 `{"params":{"portraitWindSet":65}}`），设备保留其余状态。实机回写当前值验证返回 `todoId:327/328/329` 且状态 diff 为空，因此集成不再全量回显状态 bean —— 少一次云端读取，也避免把只读诊断值误写回设备。2.4.0 起旧协议的 read-modify-write 分支与写入白名单已整体删除。官方 App 每条指令固定带 `buzzer=65`（提示音标记，非开关），集成同样处理。
 - **认证失效**：识别顶层 `errorCode` 与嵌套 `error.code`（3003/3004/403/4102），触发 HA 重新认证流程，不再静默失败。
 - **温度刻度**：实机 `tempType=0` / `setTemperature=27` 对应 27℃，本机为 **x1、步长 1.0℃**；集成仍保留自动判断（>45 视为 x2）以兼容 `tempType=1` 的半度机型。云端不下发实测室温，`current_temperature` 由配置项 `sensor_entity_id` 指定的外部温感提供。
 - **设备归组**：所有实体带 `DeviceInfo`，在 HA 中归入同一个设备卡片。
+- **单型号**：`DEVICE_PROFILE` 是唯一的设备描述；实体平台仍以数据驱动方式读取它，但没有任何型号探测、回退或第二套协议分支。
+
+## 单型号专用与配置流程（2.4.0）
+
+本集成现在**只接 CS-ZY35K410**（`deviceId` 类别 `0900`）。删除的代码：
+
+| 已删除 | 原用途 |
+|---|---|
+| `CZ-RD501DW2` 完整 profile | 另一套线控器的模式 / 风速 / 摆风映射与 7 个英文实体 |
+| `ACDevSetStatusInfoAW` 旧写端点、`_send_command_legacy`、写入白名单 `SAFE_KEYS` / `AIRCONCOMMON_SAFE_KEYS` | 旧机型的 read-modify-write 全量回显 |
+| 配置表单的「线控器/遥控器型号」下拉与型号自动探测 | 多机型选择 |
+| `FAN_MUTE`（Quiet）与 `fan_payload_overrides` 分支 | 旧机型静音档，本机映射为空，属死代码 |
+| `ACGetAllAirconListCommon` 与 `device_count` 属性 | 拉取账号下全部空调列表 |
+
+**配置流程一步未砍**，仍是完整三步 + 重新认证：
+
+1. **登录**：`UsrGetToken` → `UsrLogin` → `UsrGetBindDevInfo`；会话（usrId / SSID / familyId）写入 `hass.data` 缓存，重复配置时先验证缓存会话是否有效。
+2. **设备选择**：设备列表只保留类别 `0900` 的空调（洗衣机等其它设备不再出现）；表单保留「选择空调设备」与「关联室温传感器（可选）」，已配置设备自动排除，`no_devices_found` / `all_devices_configured` / `token_generation_failed` 三种异常分支齐全。
+3. **创建条目**：由 `deviceId` 按双重 SHA-512 推导 token，写入 usrId / SSID / deviceId / token / 可选温感；型号由代码固定，不再需要用户选择。
+4. **重新认证**：云端返回 4102 / 3003 等认证错误时进入 reauth，只刷新 usrId 与 SSID，**设备 ID 与全部实体 ID 不变**。
+
+> 旧配置条目数据里残留的 `controller_model` 键会被忽略，不影响加载；所有 `unique_id` / `entity_id` 保持不变。
 
 ## 已知限制
 
 | 项目 | 状态 |
 |---|---|
+| 其它机型 / 设备类别 | **2.4.0 起不支持**：只接 CS-ZY35K410（0900），旧线控器 CZ-RD501DW2 与非空调设备已从代码中移除 |
 | 空调本体室温 | 云端不下发（`inhaleTemperature=128` 为哨兵值，官方 App 也读不到）；需外部温感 + 配置项 `sensor_entity_id` |
 | `select.场景` 状态回显 | 云端无 `scene` 回读，实体显示 `unavailable`；指令仍可下发 |
 | 显示灯平台 | 保持 `switch`（协议为反向二值 0=亮 / 1=灭，已实机确认）；无亮度 / 色温，不转成 `light` |
@@ -178,5 +202,7 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 2.3.0 新增「逐时用电」「设备信息」2 个只读 sensor（33→35），其余新数据全部作为属性挂到已有实体；同时把新协议控制改为增量写入、滤网复位改为 `filter` + `filterReset` 双发（官方 H5 用 `filter`，旧协议用 `filterReset`）。**所有现有 unique_id / entity_id 不变**，升级后新实体自动出现，无需重新配置。
 
 2.3.1 把「回风温度」sensor 与「滤网需更换」binary_sensor 设为**默认禁用**（35 个定义 / 33 个默认可见），两者均为只读且在本机型上无有效数据；不删除定义、不改动 `unique_id`，可随时在 HA 中重新启用。已有安装需手动在实体注册表禁用这两条。
+
+2.4.0 收敛为单型号专用：删除 CZ-RD501DW2 profile / 旧协议写入 / 型号下拉 / 全屋设备列表端点（`device_count` 属性随之移除）。**配置流程仍完整**（登录 → 设备发现与选择 → token → reauth），所有 `unique_id` / `entity_id` 不变，升级后无需重新配置；旧条目里的 `controller_model` 键被忽略。
 
 建议升级前备份 `/config/custom_components/panasonic_smart_china_zy`。本仓库保留了 `backup/v1.1.0` 分支与 `backup-v1.1.0-before-completion` 标签，可随时回滚。

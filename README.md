@@ -1,7 +1,7 @@
 # Panasonic CS-ZY35K410 for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-[![version](https://img.shields.io/badge/version-2.4.1-blue.svg)]()
+[![version](https://img.shields.io/badge/version-2.5.0-blue.svg)]()
 
 面向中国区「松下智能家电」App 的 Home Assistant 自定义集成，集成显示名 **Panasonic CS-ZY35K410**，**仅适配 CS-ZY35K410**（洵风系列，2024 AirconCommon 新协议，设备类别 `0900`）；2.4.0 起不再兼容其它机型或设备类别。域名 `panasonic_smart_china_zy`，不与原版 `panasonic_smart_china` 冲突。
 
@@ -19,13 +19,13 @@
 
 ## 本次更新接入了什么（1.x → 2.4.0）
 
-这一轮不是「多接几个实体」，而是拿官方 H5 主包 + 26 个懒加载 chunk 的完整字段字典，配合本机真实云端响应把协议重新对齐，最后在 2.4.0 收敛为单型号专用：**运行期覆盖 18 个云端端点（15 读 / 3 写），另有 2 个登录端点**；实体从字段错配、各自轮询，重整为 **7 个平台 / 35 个定义 / 33 个默认可见**；能拿到但不需要用户操作的数据一律做成属性。
+这一轮不是「多接几个实体」，而是拿官方 H5 主包 + 26 个懒加载 chunk 的完整字段字典，配合本机真实云端响应把协议重新对齐，最后在 2.4.0 收敛为单型号专用：**运行期覆盖 18 个云端端点（15 读 / 3 写），另有 2 个登录端点**；实体从字段错配、各自轮询，重整为 **6 个平台 / 32 个定义 / 30 个默认可见**；能拿到但不需要用户操作的数据一律做成属性。
 
 ### 新接入的云端能力
 
 | 类别 | 端点 | 接入内容 | 频率 |
 |---|---|---|---|
-| 状态与控制 | `ACDevGetStatusInfoAW`、`ACDevSetStatusNewProtocol` | 开关 / 模式 / 设定温度 / 风速 / 上下与左右扫风 / 场景 / 10 组 `*Ex` 门控开关 / 2 个按钮 | 15s 读，操作时写 |
+| 状态与控制 | `ACDevGetStatusInfoAW`、`ACDevSetStatusNewProtocol` | 开关 / 模式 / 设定温度 / 风速 / 上下与左右扫风 / 10 组 `*Ex` 门控开关 / 2 个按钮 | 15s 读，操作时写 |
 | 用电统计 | `ACGetElectricChargeTodayInfo`、`ACGetElectricChargeDaylyInfo`、`ACGetAirconYearGraphInfo` | 今日 / 本月 / 本年电量、电费、运行时长 | 60s |
 | **逐时·逐日曲线** | `ACGetAirconDayGraphInfo`、`ACGetAirconMonthGraphInfo` | 24 点 power / cost / 设定温度、30 天日用电与日费用数组（原本只在 App 图表里） | 60s |
 | 电价与模式记忆 | `ACGetAirconElectricChargeInfo`、`ACSetAirconElectricChargeInfo`、`ACGetModeTempInfo` | 电价可写（本机 0.6 元/kWh）、制冷 / 制暖 / 抽湿记忆温度与风速 | 60s |
@@ -37,7 +37,7 @@
 
 ### 落到 HA 的形式
 
-- **实体**：35 个定义 / 33 个默认可见，原有 `unique_id` 与 `entity_id` 全部保留，旧自动化、仪表盘无需改动。清单见下节。
+- **实体**：32 个定义 / 30 个默认可见，原有 `unique_id` 与 `entity_id` 全部保留，旧自动化、仪表盘无需改动。清单见下节。
 - **属性而非实体**：模式配色、19 个 `*Ex` 能力位、12 项设备诊断、24 点逐时曲线、30 天日曲线、记忆风速、官方帮助图链接，挂在 climate 与已有 sensor 上，不制造「实体多但没用」的噪音。
 - **清理**：删掉 6 个协议里不存在的历史实体（`displaySet` / `sleepMode` / `powerfulMode` / `cleanMode` / `buzzer` / `selfcleanReset`）与 3 个本机型不支持的实体（UVC 除菌 / 语音提示 / 新风运行）；HA 侧清掉 16 条孤儿注册记录；「回风温度」「滤网需更换」2 个无效只读实体改为默认禁用（可随时重新启用）。
 - **写入路径**：新协议改为增量写入（只发变更字段 + `buzzer=65`），滤网复位改为 `filter` + `filterReset` 双发；一次性指令不写入乐观状态，避免误报。
@@ -50,7 +50,7 @@
 | `tempType=0`、`setTemperature=27` | 温度 x1 编码，`target_temp_step = 1.0`（26 → 27 → 28），**不是 0.5℃**；0.5℃ 只属于 `tempType=1` 的 x2 机型 |
 | 51 个状态字段无实测室温，`inhaleTemperature=128` 是哨兵值 | 硬件有回风探头，但中国云端不下发读数（官方 App 同样读不到）；`climate.current_temperature` 走配置项 `sensor_entity_id`，当前接的是外部温感 `sensor.linp_ks2bb_ec09_temperature` |
 | `lamp` 是反向二值（0=亮 / 1=灭），实机 `lamp=1` → HA 显示 `off` | **已实机确认状态正确**，保持 `switch` 平台，不换 `light`：无亮度 / 色温 / 颜色，换过去会被「全屋关灯」类自动化与语音指令误伤 |
-| 云端不下发 `scene` 回显 | `select.场景` 可写但无状态回显，HA 中显示 `unavailable`，属协议限制 |
+| 51 个状态字段无 `scene`、也无 `sceneEx` | 本机型不支持「风感场景」（环抱/超远/怡静），2.5.0 已删除该 select；官方 App 有此功能，但只对特定 `airconType` 型号开放 |
 | `spaceCleanEx=1` | 空间净化为硬件真实支持，保留 |
 | `uvcEx=0` / `voiceSetEx=0` / `ervType=0` | UVC 除菌、语音提示、新风运行已移除 |
 
@@ -71,13 +71,12 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 
 > 松下账号是**单点登录**。HA 登录后手机 App 会掉线；手机重新登录又会让 HA 会话失效。会话失效时集成会提示「重新登录松下账号」，重新输入密码即可，设备 ID 与已有实体 ID 不变。
 
-## 实体清单（共 35 个定义，默认启用 33 个）
+## 实体清单（共 32 个定义，默认启用 30 个）
 
 | 平台 | 实体 | 状态字段 / 端点 | 门控 |
 |---|---|---|---|
 | climate ×1 | 空调 | `runStatus` / `runMode` / `setTemperature` / `windSet` / `portraitWindSet` / `orientationWindSet` | — |
 | switch ×10 | 电源、强劲运转、自清洁、柔湿制冷、辅热、纳诺怡、睡眠、显示灯、空间净化、**定时开关** | `highCool` / `cleanSet` / `cool` / `elecHeat` / `nanoe` / `lamp` / `spaceClean` / `fixTimeStatus` | `*Ex` 能力位 |
-| select ×3 | 场景、上下扫风位置、左右扫风位置 | `scene` / `portraitWindSet` / `orientationWindSet` | 左右扫风由 `leftType` 门控 |
 | button ×2 | 电源切换、滤网复位 | `runStatus` / `filter` + `filterReset` | — |
 | sensor ×16 | ~~回风温度~~（默认隐藏）、故障码、今日用电量/时长/费用、本月用电量/时长/费用、本年用电量/费用、制冷/制暖/抽湿记忆温度、定时计划、**逐时用电**、**设备信息** | 状态 bean + 电量/电价/模式温度/定时 + `ACGetAirconDayGraphInfo` / `ACGetAirconMonthGraphInfo` / `ACDevGetFwVersion` 等 | — |
 | binary_sensor ×2 | 故障、~~滤网需更换~~（默认隐藏） | `alarmCode` / `filterReset` | — |
@@ -104,7 +103,8 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 - 风速：Auto(65)、Min(49)、Low(50)、Medium(52)、High(54)、Max(55)，对应 App 的自动/20%/40%/60%/80%/100%
 - 上下扫风：Auto(70)、方向 1–5(65/68/67/69/66)
 - 左右扫风：Auto(64)、最左(66)、偏左(108)、正对(67)、偏右(87)、最右(65)
-- 场景：关闭(64)、怡静风(65)、超远风(66)、环抱风(67)
+
+> 上下 / 左右扫风只通过 climate 实体的「摆动模式」「水平摆动模式」两个下拉控制；2.5.0 已删除原来重复的 3 个 select（场景、上下扫风位置、左右扫风位置），`portraitWindSet` / `orientationWindSet` 仍由 climate 读写。
 
 ### App 配色（模式色值）
 
@@ -191,7 +191,7 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 |---|---|
 | 其它机型 / 设备类别 | **2.4.0 起不支持**：只接 CS-ZY35K410（0900），旧线控器 CZ-RD501DW2 与非空调设备已从代码中移除 |
 | 空调本体室温 | 云端不下发（`inhaleTemperature=128` 为哨兵值，官方 App 也读不到）；需外部温感 + 配置项 `sensor_entity_id` |
-| `select.场景` 状态回显 | 云端无 `scene` 回读，实体显示 `unavailable`；指令仍可下发 |
+| 风感场景（环抱/超远/怡静） | **本机型不支持**：51 个状态字段无 `scene`，也无 `sceneEx` 能力位 → 2.5.0 已删除该 select（原实体恒为 `unavailable`） |
 | 显示灯平台 | 保持 `switch`（协议为反向二值 0=亮 / 1=灭，已实机确认）；无亮度 / 色温，不转成 `light` |
 | 定时开关机 | **2.2.0 已接入**：总开关可写、每周计划只读展示；定时条目的增删改未提供（避免误写覆盖 App 计划） |
 | 新风独立 fan 实体 | 本机 `ervType=0`（无新风模块），2.2.1 起不再注册「新风运行」实体 |
@@ -216,6 +216,8 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 2.4.0 收敛为单型号专用：删除 CZ-RD501DW2 profile / 旧协议写入 / 型号下拉 / 全屋设备列表端点（`device_count` 属性随之移除）。**配置流程仍完整**（登录 → 设备发现与选择 → token → reauth），保留注册表升级时所有 `unique_id` / `entity_id` 不变，无需重新配置；旧条目里的 `controller_model` 键被忽略。
 
 2.4.1 集成显示名改为 `Panasonic CS-ZY35K410`（manifest `name`），并补齐品牌图标：`brand/icon.png`、`brand/logo.png` 及根目录同名文件。**只影响集成在 UI 中的名称与图标**，设备名、`unique_id`、`entity_id` 与实体状态均不变。
+
+2.5.0 删除 `select` 平台（35→32，平台数 7→6）：① `场景`——官方 App 有「风感场景」（关闭/怡静风/超远风/环抱风，64–67），但本机状态报文里既无 `scene` 字段也无 `sceneEx` 能力位，实体永远 `unavailable`（灰）；② `上下扫风位置`、`左右扫风位置`——与 climate 的「摆动模式」「水平摆动模式」写的是同一对字段（`portraitWindSet` / `orientationWindSet`），重复入口。扫风统一由 climate 实体控制，功能无损失。三个 select 在 HA 中会变成孤儿实体，需在「实体」页面删除（本次已代为清理注册表）。
 
 > 关于 `entity_id`：2.4.0 说的「不变」适用于保留实体注册表的升级；若清空注册表做全新安装，HA 会按当前中文实体名重新生成 ID（如 `switch.wo_shi_kong_diao_dian_yuan`），`unique_id` 与实体功能不受影响。
 

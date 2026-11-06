@@ -24,15 +24,15 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 
 > 松下账号是**单点登录**。HA 登录后手机 App 会掉线；手机重新登录又会让 HA 会话失效。会话失效时集成会提示「重新登录松下账号」，重新输入密码即可，设备 ID 与已有实体 ID 不变。
 
-## 实体清单（合计 33 个）
+## 实体清单（合计 35 个）
 
 | 平台 | 实体 | 状态字段 / 端点 | 门控 |
 |---|---|---|---|
 | climate ×1 | 空调 | `runStatus` / `runMode` / `setTemperature` / `windSet` / `portraitWindSet` / `orientationWindSet` | — |
 | switch ×10 | 电源、强劲运转、自清洁、柔湿制冷、辅热、纳诺怡、睡眠、显示灯、空间净化、**定时开关** | `highCool` / `cleanSet` / `cool` / `elecHeat` / `nanoe` / `lamp` / `spaceClean` / `fixTimeStatus` | `*Ex` 能力位 |
 | select ×3 | 场景、上下扫风位置、左右扫风位置 | `scene` / `portraitWindSet` / `orientationWindSet` | 左右扫风由 `leftType` 门控 |
-| button ×2 | 电源切换、滤网复位 | `runStatus` / `filterReset` | — |
-| sensor ×14 | 回风温度、故障码、今日用电量/时长/费用、本月用电量/时长/费用、本年用电量/费用、制冷/制暖/抽湿记忆温度、**定时计划** | 状态 bean + `ACGetElectricChargeTodayInfo` / `ACGetElectricChargeDaylyInfo` / `ACGetAirconYearGraphInfo` / `ACGetModeTempInfo` / `ACGetAirconTimerNewProtocol` | — |
+| button ×2 | 电源切换、滤网复位 | `runStatus` / `filter` + `filterReset` | — |
+| sensor ×16 | 回风温度、故障码、今日用电量/时长/费用、本月用电量/时长/费用、本年用电量/费用、制冷/制暖/抽湿记忆温度、定时计划、**逐时用电**、**设备信息** | 状态 bean + 电量/电价/模式温度/定时 + `ACGetAirconDayGraphInfo` / `ACGetAirconMonthGraphInfo` / `ACDevGetFwVersion` 等 | — |
 | binary_sensor ×2 | 故障、滤网需更换 | `alarmCode` / `filterReset` | — |
 | number ×1 | **电价**（元/kWh，可写） | `ACGetAirconElectricChargeInfo` / `ACSetAirconElectricChargeInfo` | — |
 
@@ -63,6 +63,22 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 {{ state_attr('climate.<你的空调实体>', 'mode_color') }}
 ```
 
+### 隐藏数据（2.3.0 新增）
+
+把官方 H5 里定义、但 App 没在 HA 侧暴露的只读数据补齐。**不新增任何开关类实体**，绝大多数信息作为属性挂在已有实体上：
+
+| 位置 | 来源端点 | 内容 |
+|---|---|---|
+| `sensor.…逐时用电` | `ACGetAirconDayGraphInfo` | state = 当前钟点用电量；属性 `hourly_power_kwh` / `hourly_cost_cny` / `hourly_set_temperature`（24 点数组）、`today_total_kwh`、`peak_hour` / `peak_kwh`；温度 `255` = 无读数 |
+| `sensor.…设备信息` | `ACDevGetFwVersion` 等 6 个 | state = 固件版本（实机 `r_2_0_0_1616`）；属性 `ota_percent`、`device_name`、`master_user`、`device_count`、`help_links` / `error_links` / `problem_links`（官方帮助与故障排查图） |
+| 记忆温度 3 个 sensor | `ACGetModeTempInfo`（原本就在轮询） | 新增 `wind_set` 属性（50 / 65 / 55），制冷另附 `nanoe_wind_set=65`，零额外请求 |
+| `sensor.…本月用电量` | `ACGetAirconMonthGraphInfo` | 新增 `daily_power_kwh` / `daily_cost_cny`（30 天数组）属性 |
+| `climate` | 状态 bean（原本就在轮询） | 新增 `device_diagnostics`（`airVersion` / `preAirconMode` / `runForbidden` / `unusualPresent` / `e017f` / 各 `*Type`）与 `capabilities`（全部 `*Ex` 能力位）属性 |
+
+固件、OTA、帮助资料、设备名、主用户、全屋设备列表这 6 个端点变化极慢，在客户端缓存 **30 分钟**，不会让 60s 辅助轮询变成每轮十几个请求。逐时/逐日曲线与原有 7 个辅助端点一起按 60s 更新。
+
+> 实测已失效、刻意不接：`ACGetAirconWeekGraphInfo` 恒返回 `8191 服务器内部错误`；`ACGetWeatherInfo` 所有省市返回空字段；`ACDevSetOTA` / `DevUnbind` 属危险写操作。`runForbidden` / `unusualPresent` 在官方 App 里**只读**（异常弹窗用），不做成开关。
+
 ### 定时（2.2.0 新增）
 
 协议取自官方 `TimingSettingPage` / `ParmSetPage`，并已用实机响应（2026-11-06）核对：
@@ -84,7 +100,7 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 ## 架构
 
 - **单设备单轮询**：所有实体共享一个 `PanasonicStatusCoordinator`（15s）与一个 `PanasonicAuxCoordinator`（60s），不再每个实体各发一次云端请求。
-- **Read-Modify-Write**：控制前重新读取最新状态，只回写 `AIRCONCOMMON_SAFE_KEYS` 中实机确认的 24 个可写字段；能力位、只读诊断值、一次性指令不回显。官方 App 每条指令固定带 `buzzer=65`（提示音标记，非开关），集成同样处理。
+- **增量写入（2.3.0）**：`ACDevSetStatusNewProtocol` 是增量协议，官方 H5 的 `setStatusInfoAWByOne` 只发单个字段（如 `{"params":{"portraitWindSet":65}}`），设备保留其余状态。实机回写当前值验证返回 `todoId:327/328/329` 且状态 diff 为空，因此集成不再全量回显状态 bean —— 少一次云端读取，也避免把只读诊断值误写回设备。旧 `CZ-RD501DW2` 的 `ACDevSetStatusInfoAW` 仍保留原来的 read-modify-write 白名单逻辑。官方 App 每条指令固定带 `buzzer=65`（提示音标记，非开关），集成同样处理。
 - **认证失效**：识别顶层 `errorCode` 与嵌套 `error.code`（3003/3004/403/4102），触发 HA 重新认证流程，不再静默失败。
 - **温度刻度**：实机 `setTemperature=27` 对应 27℃，确认本机为 **x1**；集成仍保留自动判断（>45 视为 x2）以兼容其他固件。
 - **设备归组**：所有实体带 `DeviceInfo`，在 HA 中归入同一个设备卡片。
@@ -108,5 +124,7 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 2.2.0 新增「定时开关」switch 与「定时计划」sensor，复用现有 60s 辅助轮询，不增加云端请求频率；升级后自动出现，无需重新配置。
 
 2.2.1 清理：移除 UVC 除菌、语音提示、新风运行 3 个本机型不支持的实体定义（36→33），并在 HA 中删除 13 个 1.1.0 / 2.1.0 遗留孤儿实体，共清理 16 条注册表记录。删除前会备份 `/config/.storage/core.entity_registry`；若需恢复，改回代码重启后实体会重新注册（entity_id 可能变化）。
+
+2.3.0 新增「逐时用电」「设备信息」2 个只读 sensor（33→35），其余新数据全部作为属性挂到已有实体；同时把新协议控制改为增量写入、滤网复位改为 `filter` + `filterReset` 双发（官方 H5 用 `filter`，旧协议用 `filterReset`）。**所有现有 unique_id / entity_id 不变**，升级后新实体自动出现，无需重新配置。
 
 建议升级前备份 `/config/custom_components/panasonic_smart_china_zy`。本仓库保留了 `backup/v1.1.0` 分支与 `backup-v1.1.0-before-completion` 标签，可随时回滚。

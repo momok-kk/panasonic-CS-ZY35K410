@@ -50,10 +50,31 @@ ENDPOINT_TIMER_SET = "ACSetAirconTimerNewProtocol"
 ENDPOINT_FIX_STATUS_GET = "ACGetAirconFixTimeStatusInfo"
 ENDPOINT_FIX_STATUS_SET = "ACSetAirconFixTimeStatusInfo"
 
+# Additional read-only endpoints found in the official AirconCommon bundles
+# and verified against a live CS-ZY35K410 (2026-11-06).  These feed the
+# 60s auxiliary coordinator, except the slow-changing device_meta group.
+ENDPOINT_DAY_GRAPH = "ACGetAirconDayGraphInfo"
+ENDPOINT_MONTH_GRAPH = "ACGetAirconMonthGraphInfo"
+ENDPOINT_FW_VERSION = "ACDevGetFwVersion"
+ENDPOINT_OTA_PERCENT = "ACDevGetOTAPercent"
+ENDPOINT_HELP_ERROR = "ACDevGetHelpAndErrorInfo"
+ENDPOINT_MASTER_USER = "ACDevGetMasterUser"
+ENDPOINT_ALL_DEVICES = "ACGetAllAirconListCommon"
+ENDPOINT_DEV_NAME = "DevGetName"
+
+# Firmware/help/master-user data barely changes; cache it instead of hitting
+# six extra cloud endpoints on every 60s auxiliary poll.
+DEVICE_META_TTL = 1800
+
 # The official web app sends buzzer=65 with EVERY command (BUZZER:{ON:65}).
 # It is a "beep on this command" marker, not a persistent toggle; the status
 # bean merely echoes a sticky value.  Do not expose it as a switch.
 COMMAND_BUZZER = 65
+
+# One-shot command markers, not persistent device state.  Never merge these
+# into the optimistic status cache: filterReset=1 would briefly make the
+# "filter due" binary sensor read as on until the next 15s poll.
+TRANSIENT_COMMAND_KEYS = {"filter", "filterReset"}
 
 # Business error codes that mean "session expired / re-authenticate".
 # Note: the cloud returns either a top-level errorCode or a nested
@@ -162,6 +183,12 @@ AUX_SENSORS = [
         "device_class": SensorDeviceClass.ENERGY,
         "state_class": SensorStateClass.TOTAL_INCREASING,
         "sum_array": True,
+        "attributes": [
+            {"name": "daily_power_kwh", "source": "month_graph",
+             "field": "power"},
+            {"name": "daily_cost_cny", "source": "month_graph",
+             "field": "cost"},
+        ],
     },
     {
         "key": "duration_month", "name": "本月运行时长",
@@ -198,6 +225,14 @@ AUX_SENSORS = [
         "unit": UnitOfTemperature.CELSIUS,
         "device_class": SensorDeviceClass.TEMPERATURE,
         "state_class": SensorStateClass.MEASUREMENT,
+        # ACGetModeTempInfo also returns remembered fan speeds.  Expose them
+        # as attributes instead of four more entities.
+        "attributes": [
+            {"name": "wind_set", "source": "mode_temp",
+             "field": "coldModeWind"},
+            {"name": "nanoe_wind_set", "source": "mode_temp",
+             "field": "nanoeModeWind"},
+        ],
     },
     {
         "key": "mode_temp_heat", "name": "制暖记忆温度",
@@ -205,6 +240,10 @@ AUX_SENSORS = [
         "unit": UnitOfTemperature.CELSIUS,
         "device_class": SensorDeviceClass.TEMPERATURE,
         "state_class": SensorStateClass.MEASUREMENT,
+        "attributes": [
+            {"name": "wind_set", "source": "mode_temp",
+             "field": "warmModeWind"},
+        ],
     },
     {
         "key": "mode_temp_dry", "name": "抽湿记忆温度",
@@ -212,8 +251,32 @@ AUX_SENSORS = [
         "unit": UnitOfTemperature.CELSIUS,
         "device_class": SensorDeviceClass.TEMPERATURE,
         "state_class": SensorStateClass.MEASUREMENT,
+        "attributes": [
+            {"name": "wind_set", "source": "mode_temp",
+             "field": "wetModeWind"},
+        ],
     },
 ]
+
+# Two new read-only entities for the extra cloud data.  Everything else from
+# the probe is attached as attributes to existing entities so the entity
+# count stays low.
+HOURLY_ENERGY_SENSOR = {
+    "key": "hourly_energy",
+    "name": "逐时用电",
+    "source": "hourly",
+    "unit": UnitOfEnergy.KILO_WATT_HOUR,
+    "device_class": SensorDeviceClass.ENERGY,
+    "state_class": SensorStateClass.MEASUREMENT,
+}
+
+DEVICE_INFO_SENSOR = {
+    "key": "device_info",
+    "name": "设备信息",
+    "source": "device_meta",
+    "field": "version",
+    "kind": "text",
+}
 
 # Writable electricity price (yuan/kWh) from ACGet/SetAirconElectricChargeInfo.
 CHARGE_NUMBER = {
@@ -450,7 +513,13 @@ SUPPORTED_CONTROLLERS = {
         ],
         "remote_buttons": [
             {"key": "runStatus", "name": "电源切换", "toggle": True},
-            {"key": "filterReset", "name": "滤网复位", "press": 1},
+            # The AirconCommon H5 resets the filter with {"filter": 1};
+            # filterReset is the legacy ducted-controller name kept in the
+            # status bean.  Send both so either firmware generation reacts.
+            {
+                "key": "filterReset", "name": "滤网复位", "press": 1,
+                "payload": {"filter": 1, "filterReset": 1},
+            },
         ],
         "remote_selects": [
             {
@@ -482,5 +551,7 @@ SUPPORTED_CONTROLLERS = {
         "charge_number": CHARGE_NUMBER,
         "timer_switch": TIMER_SWITCH,
         "timer_sensor": TIMER_SENSOR,
+        "hourly_sensor": HOURLY_ENERGY_SENSOR,
+        "device_info_sensor": DEVICE_INFO_SENSOR,
     },
 }

@@ -35,6 +35,7 @@ class PanasonicRemoteButton(ButtonEntity):
         self._key = description["key"]
         self._press_value = description.get("press", 1)
         self._toggle = description.get("toggle", False)
+        self._payload = description.get("payload")
         self._attr_name = f"{entry.title} {description['name']}"
         self._attr_unique_id = f"panasonic_{device.device_id}_{self._key}_button"
         self._attr_device_info = device_info(device, entry.title)
@@ -48,6 +49,9 @@ class PanasonicRemoteButton(ButtonEntity):
         return self._coordinator.last_update_success
 
     async def async_press(self):
+        if self._payload:
+            await self._send(dict(self._payload))
+            return
         if not self._toggle:
             await self._send({self._key: self._press_value})
             return

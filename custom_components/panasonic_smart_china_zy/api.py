@@ -17,18 +17,28 @@ from .const import (
     CONF_SSID,
     CONF_TOKEN,
     CONF_USR_ID,
+    DEVICE_META_TTL,
+    ENDPOINT_ALL_DEVICES,
     ENDPOINT_CHARGE_GET,
     ENDPOINT_CHARGE_SET,
+    ENDPOINT_DAY_GRAPH,
+    ENDPOINT_DEV_NAME,
     ENDPOINT_ELEC_MONTH,
     ENDPOINT_ELEC_TODAY,
     ENDPOINT_ELEC_YEAR,
     ENDPOINT_FIX_STATUS_GET,
     ENDPOINT_FIX_STATUS_SET,
+    ENDPOINT_FW_VERSION,
+    ENDPOINT_HELP_ERROR,
+    ENDPOINT_MASTER_USER,
     ENDPOINT_MODE_TEMP,
+    ENDPOINT_MONTH_GRAPH,
+    ENDPOINT_OTA_PERCENT,
     ENDPOINT_TIMER_GET,
     SAFE_KEYS,
     SUCCESS_ERROR_CODES,
     SUPPORTED_CONTROLLERS,
+    TRANSIENT_COMMAND_KEYS,
     URL_BASE,
     URL_GET,
     URL_SET,
@@ -51,6 +61,11 @@ AUX_ENDPOINTS = {
     "mode_temp": (ENDPOINT_MODE_TEMP, None),
     "timer": (ENDPOINT_TIMER_GET, None),
     "timer_status": (ENDPOINT_FIX_STATUS_GET, None),
+    "hourly": (ENDPOINT_DAY_GRAPH, lambda: {"time": time.strftime("%Y%m%d")}),
+    "month_graph": (
+        ENDPOINT_MONTH_GRAPH,
+        lambda: {"time": time.strftime("%Y%m")},
+    ),
 }
 # Live responses (2026-11-06):
 #   today  -> {powerToday, costToday, durationToday}
@@ -60,6 +75,19 @@ AUX_ENDPOINTS = {
 #   mode_temp -> {coldModeTemp, warmModeTemp, wetModeTemp, *ModeWind}
 #   timer  -> {weekList: [{week: 1..7, timerList: [timer, ...]}]}
 #   timer_status -> {fixTimeStatus: 0 | 1}
+#   hourly -> {power[24], cost[24], setTemperature[24], outsideTemperature[24]}
+#   month_graph -> {power[30], cost[30], setTemperature[30], ...}
+
+# Slow-changing, read-only device metadata.  Fetched at most every
+# DEVICE_META_TTL seconds rather than on every 60s auxiliary poll.
+STATIC_ENDPOINTS = {
+    "fw_version": (ENDPOINT_FW_VERSION, None),
+    "ota": (ENDPOINT_OTA_PERCENT, None),
+    "help": (ENDPOINT_HELP_ERROR, None),
+    "master_user": (ENDPOINT_MASTER_USER, None),
+    "dev_name": (ENDPOINT_DEV_NAME, None),
+    "all_devices": (ENDPOINT_ALL_DEVICES, lambda: {"type": 4}),
+}
 
 
 class PanasonicApiError(Exception):
@@ -101,6 +129,8 @@ class PanasonicSmartDevice:
         self._coordinator = None
         # Set from the live setTemperature value; shared with temperature sensors.
         self.detected_temp_scale = None
+        self._device_meta = {}
+        self._device_meta_ts = 0.0
 
     def attach_coordinator(self, coordinator):
         """Bind the shared status coordinator for push updates."""
@@ -253,7 +283,64 @@ class PanasonicSmartDevice:
             except Exception as err:
                 _LOGGER.debug("Aux endpoint %s failed: %s", path, err)
                 result[section] = {}
+        result["device_meta"] = await self.fetch_device_meta()
         return result
+
+    async def fetch_device_meta(self):
+        """Fetch firmware/OTA/help/owner data, cached for DEVICE_META_TTL.
+
+        All six endpoints were verified on a live CS-ZY35K410.  Note that
+        ACDevGetMasterUser returns its payload at the top level instead of
+        inside "results", so both response shapes are accepted.
+        """
+        now = time.monotonic()
+        if self._device_meta and now - self._device_meta_ts < DEVICE_META_TTL:
+            return dict(self._device_meta)
+
+        raw = {}
+        for label, (path, params_builder) in STATIC_ENDPOINTS.items():
+            payload = {
+                "id": 100,
+                "usrId": self.usr_id,
+                "deviceId": self.device_id,
+                "token": self.token,
+            }
+            if params_builder:
+                payload["params"] = params_builder()
+            try:
+                data = await self._post(f"{URL_BASE}/{path}", payload)
+                section = data.get("results")
+                raw[label] = section if isinstance(section, dict) else data
+            except PanasonicAuthError:
+                raise
+            except Exception as err:
+                _LOGGER.debug("Device meta endpoint %s failed: %s", path, err)
+                raw[label] = {}
+
+        fw = raw.get("fw_version") or {}
+        ota = raw.get("ota") or {}
+        help_links = raw.get("help") or {}
+        name = raw.get("dev_name") or {}
+        owner = raw.get("master_user") or {}
+        devices = raw.get("all_devices") or {}
+        all_info = devices.get("allInfo")
+        meta = {
+            "version": fw.get("version"),
+            "ota_percent": ota.get("otaUpgradePer"),
+            "device_name": name.get("deviceName"),
+            "master_user": owner.get("masterUser"),
+            "device_count": (
+                len(all_info) if isinstance(all_info, list) else None
+            ),
+            "help_links": help_links.get("help"),
+            "error_links": help_links.get("error"),
+            "problem_links": help_links.get("problem"),
+        }
+        meta = {key: value for key, value in meta.items() if value is not None}
+        if meta.get("version"):
+            self._device_meta = meta
+            self._device_meta_ts = now
+        return meta
 
     async def set_charge(self, value):
         """Write the electricity price used by the App's cost charts."""
@@ -283,11 +370,48 @@ class PanasonicSmartDevice:
         return await self._post(f"{URL_BASE}/{ENDPOINT_FIX_STATUS_SET}", payload)
 
     async def send_command(self, changes):
-        """Read-modify-write against the freshest status, then push the update.
+        """Push only the changed fields to the cloud.
 
-        Only the profile's safe writable keys are sent.  When the status read
-        fails we refuse to write instead of replaying a stale cached state.
+        ACDevSetStatusNewProtocol is incremental: the official H5 calls
+        setStatusInfoAWByOne({"portraitWindSet": 65}) and every other field
+        is preserved by the device.  Verified on a live CS-ZY35K410
+        (todoId 327/328/329, status diff empty).  The legacy CZ-RD501DW2
+        endpoint still requires the full read-modify-write echo.
         """
+        if "NewProtocol" not in self.url_set:
+            return await self._send_command_legacy(changes)
+
+        params = dict(changes)
+        params["buzzer"] = COMMAND_BUZZER
+        await self._post(
+            self.url_set,
+            {
+                "id": 200,
+                "usrId": self.usr_id,
+                "deviceId": self.device_id,
+                "token": self.token,
+                "params": params,
+            },
+        )
+        return self._apply_optimistic(changes)
+
+    def _apply_optimistic(self, changes):
+        """Reflect a successful command immediately, then let polling verify."""
+        current = dict(self.last_params)
+        if self._coordinator is not None and self._coordinator.data:
+            current = dict(self._coordinator.data)
+        current.update(
+            (key, value)
+            for key, value in changes.items()
+            if key not in TRANSIENT_COMMAND_KEYS
+        )
+        self.last_params = current
+        if self._coordinator is not None:
+            self._coordinator.async_set_updated_data(current)
+        return current
+
+    async def _send_command_legacy(self, changes):
+        """Read-modify-write for the old ACDevSetStatusInfoAW protocol."""
         latest = await self.fetch_status()
         if not latest and self._coordinator is not None:
             latest = self._coordinator.data

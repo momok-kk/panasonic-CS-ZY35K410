@@ -31,6 +31,14 @@ from .helpers import device_info
 
 _LOGGER = logging.getLogger(__name__)
 
+# Read-only status fields worth exposing for diagnostics, without creating
+# a separate entity for each of them.
+_DIAGNOSTIC_KEYS = (
+    "airVersion", "airconType", "modeType", "tempType", "windType",
+    "upType", "leftType", "ervType", "preAirconMode", "unusualPresent",
+    "runForbidden", "e017f",
+)
+
 
 async def async_setup_entry(hass, entry, async_add_entities):
     runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
@@ -182,12 +190,23 @@ class PanasonicACEntity(CoordinatorEntity, ClimateEntity):
         )
         if not self._is_on:
             color, color_name, label = MODE_COLOR_OFF, "灰色", "待机"
-        return {
+        attributes = {
             "mode_color": color,
             "mode_color_name": color_name,
             "mode_label": label,
             "run_mode_raw": raw,
         }
+        diagnostics = {
+            key: res[key] for key in _DIAGNOSTIC_KEYS if key in res
+        }
+        capabilities = {
+            key: value for key, value in res.items() if key.endswith("Ex")
+        }
+        if diagnostics:
+            attributes["device_diagnostics"] = diagnostics
+        if capabilities:
+            attributes["capabilities"] = capabilities
+        return attributes
 
     @property
     def target_temperature(self):

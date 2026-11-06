@@ -42,6 +42,13 @@ async def async_setup_entry(hass, entry, async_add_entities):
             entities.append(
                 PanasonicTimerSensor(aux, device, entry, timer_description)
             )
+        for key, entity_class in (
+            ("hourly_sensor", PanasonicHourlyEnergySensor),
+            ("device_info_sensor", PanasonicDeviceInfoSensor),
+        ):
+            description = device.profile.get(key)
+            if description:
+                entities.append(entity_class(aux, device, entry, description))
     async_add_entities(entities)
 
 
@@ -128,6 +135,111 @@ class PanasonicAuxSensor(_BaseSensor):
             return float(raw)
         except (TypeError, ValueError):
             return None
+
+    @property
+    def extra_state_attributes(self):
+        """Attach related read-only fields without creating more entities."""
+        attributes = self._description.get("attributes")
+        if not attributes:
+            return None
+        data = self.coordinator.data or {}
+        result = {}
+        for item in attributes:
+            section = data.get(item["source"])
+            if isinstance(section, dict) and item["field"] in section:
+                result[item["name"]] = section[item["field"]]
+        return result or None
+
+
+class PanasonicHourlyEnergySensor(_BaseSensor):
+    """24-hour power/cost curve from ACGetAirconDayGraphInfo.
+
+    State is the current clock hour's consumption; the full curve is exposed
+    as attributes.  255 in setTemperature means "no reading".
+    """
+
+    _attr_icon = "mdi:chart-bar"
+
+    @property
+    def _section(self):
+        section = (self.coordinator.data or {}).get(self._description["source"])
+        return section if isinstance(section, dict) else {}
+
+    @property
+    def available(self):
+        power = self._section.get("power")
+        return (
+            self.coordinator.last_update_success
+            and isinstance(power, list)
+            and len(power) >= 24
+        )
+
+    @property
+    def native_value(self):
+        power = self._section.get("power")
+        hour = datetime.now().hour
+        if not isinstance(power, list) or hour >= len(power):
+            return None
+        try:
+            return float(power[hour])
+        except (TypeError, ValueError):
+            return None
+
+    @property
+    def extra_state_attributes(self):
+        section = self._section
+        power = section.get("power")
+        if not isinstance(power, list) or not power:
+            return None
+        attributes = {
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "hourly_power_kwh": power,
+            "hourly_cost_cny": section.get("cost"),
+            "hourly_set_temperature": section.get("setTemperature"),
+            "today_total_kwh": sum_array(power),
+        }
+        numerics = [
+            (index, float(value))
+            for index, value in enumerate(power)
+            if isinstance(value, (int, float))
+        ]
+        if numerics:
+            peak_index, peak_value = max(numerics, key=lambda pair: pair[1])
+            if peak_value > 0:
+                attributes["peak_hour"] = f"{peak_index:02d}:00"
+                attributes["peak_kwh"] = peak_value
+        return attributes
+
+
+class PanasonicDeviceInfoSensor(_BaseSensor):
+    """Firmware version plus cached device metadata and official help links."""
+
+    _attr_icon = "mdi:information-outline"
+
+    @property
+    def _section(self):
+        section = (self.coordinator.data or {}).get(self._description["source"])
+        return section if isinstance(section, dict) else {}
+
+    @property
+    def available(self):
+        return (
+            self.coordinator.last_update_success
+            and "version" in self._section
+        )
+
+    @property
+    def native_value(self):
+        return self._section.get("version")
+
+    @property
+    def extra_state_attributes(self):
+        section = self._section
+        if not section:
+            return None
+        return {
+            key: value for key, value in section.items() if key != "version"
+        } or None
 
 
 class PanasonicTimerSensor(_BaseSensor):

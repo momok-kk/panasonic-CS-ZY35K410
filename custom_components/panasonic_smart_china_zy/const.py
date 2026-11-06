@@ -138,6 +138,10 @@ AIRCONCOMMON_SAFE_KEYS = [
 ]
 
 # Status-bean sensors (15s coordinator).
+# inhaleTemperature is a sentinel (128) on the CS-ZY35K410: the unit never
+# reports a real return-air temperature, so the sensor would stay "unknown"
+# forever.  Keep the definition for other models but do not register it by
+# default; it can be re-enabled from the HA entity registry if needed.
 STATUS_SENSORS = [
     {
         "key": "inhale_temperature",
@@ -147,6 +151,7 @@ STATUS_SENSORS = [
         "device_class": SensorDeviceClass.TEMPERATURE,
         "state_class": SensorStateClass.MEASUREMENT,
         "temperature": True,
+        "enabled_default": False,
     },
     {
         "key": "alarm_code",
@@ -327,8 +332,13 @@ BINARY_SENSORS = [
         "device_class": BinarySensorDeviceClass.PROBLEM,
     },
     {
+        # "filterReset" is a one-shot reset COMMAND in the official protocol,
+        # not a filter-due status bit.  The App shows its filter reminder via
+        # a local timer and only for airconType==2 (this unit is 0), so this
+        # flag can never become "on".  Hidden by default; re-enable manually.
         "key": "filter_due", "name": "滤网需更换", "field": "filterReset",
         "equals": 1,
+        "enabled_default": False,
     },
     # "fresh_air_running" deliberately removed: live ervType=0 means this
     # CS-ZY35K410 has no fresh-air module at all.

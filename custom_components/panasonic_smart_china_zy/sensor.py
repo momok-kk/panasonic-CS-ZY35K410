@@ -67,6 +67,9 @@ class _BaseSensor(CoordinatorEntity, SensorEntity):
         self._attr_native_unit_of_measurement = description.get("unit")
         self._attr_device_class = description.get("device_class")
         self._attr_state_class = description.get("state_class")
+        self._attr_entity_registry_enabled_default = description.get(
+            "enabled_default", True
+        )
 
 
 class PanasonicStatusSensor(_BaseSensor):

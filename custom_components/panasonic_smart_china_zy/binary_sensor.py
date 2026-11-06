@@ -35,6 +35,9 @@ class PanasonicBinarySensor(CoordinatorEntity, BinarySensorEntity):
         )
         self._attr_device_info = device_info(device, entry.title)
         self._attr_device_class = description.get("device_class")
+        self._attr_entity_registry_enabled_default = description.get(
+            "enabled_default", True
+        )
 
     @property
     def available(self):

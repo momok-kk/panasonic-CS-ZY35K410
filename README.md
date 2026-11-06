@@ -1,7 +1,7 @@
 # Panasonic Smart China ZY Custom for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-[![version](https://img.shields.io/badge/version-2.2.1-blue.svg)]()
+[![version](https://img.shields.io/badge/version-2.3.1-blue.svg)]()
 
 面向中国区「松下智能家电」App 的 Home Assistant 自定义集成，重点适配 **CS-ZY35K410**（洵风系列，2024 AirconCommon 新协议）。域名 `panasonic_smart_china_zy`，不与原版 `panasonic_smart_china` 冲突。
 
@@ -24,7 +24,7 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 
 > 松下账号是**单点登录**。HA 登录后手机 App 会掉线；手机重新登录又会让 HA 会话失效。会话失效时集成会提示「重新登录松下账号」，重新输入密码即可，设备 ID 与已有实体 ID 不变。
 
-## 实体清单（合计 35 个）
+## 实体清单（共 35 个定义，默认启用 33 个）
 
 | 平台 | 实体 | 状态字段 / 端点 | 门控 |
 |---|---|---|---|
@@ -32,9 +32,20 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 | switch ×10 | 电源、强劲运转、自清洁、柔湿制冷、辅热、纳诺怡、睡眠、显示灯、空间净化、**定时开关** | `highCool` / `cleanSet` / `cool` / `elecHeat` / `nanoe` / `lamp` / `spaceClean` / `fixTimeStatus` | `*Ex` 能力位 |
 | select ×3 | 场景、上下扫风位置、左右扫风位置 | `scene` / `portraitWindSet` / `orientationWindSet` | 左右扫风由 `leftType` 门控 |
 | button ×2 | 电源切换、滤网复位 | `runStatus` / `filter` + `filterReset` | — |
-| sensor ×16 | 回风温度、故障码、今日用电量/时长/费用、本月用电量/时长/费用、本年用电量/费用、制冷/制暖/抽湿记忆温度、定时计划、**逐时用电**、**设备信息** | 状态 bean + 电量/电价/模式温度/定时 + `ACGetAirconDayGraphInfo` / `ACGetAirconMonthGraphInfo` / `ACDevGetFwVersion` 等 | — |
-| binary_sensor ×2 | 故障、滤网需更换 | `alarmCode` / `filterReset` | — |
+| sensor ×16 | ~~回风温度~~（默认隐藏）、故障码、今日用电量/时长/费用、本月用电量/时长/费用、本年用电量/费用、制冷/制暖/抽湿记忆温度、定时计划、**逐时用电**、**设备信息** | 状态 bean + 电量/电价/模式温度/定时 + `ACGetAirconDayGraphInfo` / `ACGetAirconMonthGraphInfo` / `ACDevGetFwVersion` 等 | — |
+| binary_sensor ×2 | 故障、~~滤网需更换~~（默认隐藏） | `alarmCode` / `filterReset` | — |
 | number ×1 | **电价**（元/kWh，可写） | `ACGetAirconElectricChargeInfo` / `ACSetAirconElectricChargeInfo` | — |
+
+### 默认隐藏的两个只读实体（2.3.1）
+
+这两个都是**只读传感器，不是开关**，且不参与任何控制，隐藏不影响任何功能。原因是本机型的数据源无效：
+
+| 实体 | 类型 | 实机值 | 判定 |
+|---|---|---|---|
+| 回风温度 | `sensor`（温度） | `inhaleTemperature = 128` | 官方哨兵值，本机不上报回风温度，实体恒 `unknown` |
+| 滤网需更换 | `binary_sensor`（状态位） | `filterReset = 0` | 该字段是一次性**复位指令**而非到期状态位；官方 App 的滤网提醒由本地计时触发且仅 `airconType == 2` 弹出（本机为 0），实体恒 `off` |
+
+实现方式为 `entity_registry_enabled_default = False`：全新安装不会注册这两个实体；已有安装需在 HA 实体注册表将这两条设为禁用（升级不会自动改动既有注册记录）。如需恢复，在 HA「实体」页面筛选「已禁用」并重新启用即可，`unique_id` / `entity_id` 均保留。
 
 剩余实体仍由 `*Ex` 能力位门控；能力位为 0 或状态字段缺失时会显示为「不可用」，这是硬件不支持的正常表现。本机 `spaceCleanEx=1`，**空间净化是真实支持的功能**（`spaceClean=0` 表示当前关闭），不要误删。
 
@@ -126,5 +137,7 @@ HACS：添加本仓库为自定义仓库（类别 Integration）→ 搜索 `Pana
 2.2.1 清理：移除 UVC 除菌、语音提示、新风运行 3 个本机型不支持的实体定义（36→33），并在 HA 中删除 13 个 1.1.0 / 2.1.0 遗留孤儿实体，共清理 16 条注册表记录。删除前会备份 `/config/.storage/core.entity_registry`；若需恢复，改回代码重启后实体会重新注册（entity_id 可能变化）。
 
 2.3.0 新增「逐时用电」「设备信息」2 个只读 sensor（33→35），其余新数据全部作为属性挂到已有实体；同时把新协议控制改为增量写入、滤网复位改为 `filter` + `filterReset` 双发（官方 H5 用 `filter`，旧协议用 `filterReset`）。**所有现有 unique_id / entity_id 不变**，升级后新实体自动出现，无需重新配置。
+
+2.3.1 把「回风温度」sensor 与「滤网需更换」binary_sensor 设为**默认禁用**（35 个定义 / 33 个默认可见），两者均为只读且在本机型上无有效数据；不删除定义、不改动 `unique_id`，可随时在 HA 中重新启用。已有安装需手动在实体注册表禁用这两条。
 
 建议升级前备份 `/config/custom_components/panasonic_smart_china_zy`。本仓库保留了 `backup/v1.1.0` 分支与 `backup-v1.1.0-before-completion` 标签，可随时回滚。

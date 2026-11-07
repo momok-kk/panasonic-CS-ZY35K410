@@ -5,7 +5,7 @@ from __future__ import annotations
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, icon_for
 from .helpers import as_int, device_info
 
 
@@ -34,6 +34,7 @@ class PanasonicBinarySensor(CoordinatorEntity, BinarySensorEntity):
             f"panasonic_{device.device_id}_{description['key']}_binary_sensor"
         )
         self._attr_device_info = device_info(device, entry.title)
+        self._attr_icon = icon_for("binary_sensor", description["key"])
         self._attr_device_class = description.get("device_class")
         self._attr_entity_registry_enabled_default = description.get(
             "enabled_default", True

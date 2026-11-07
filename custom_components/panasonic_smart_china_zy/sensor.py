@@ -14,6 +14,7 @@ from .const import (
     TIMER_ACTIONS,
     TIMER_RUN_MODES,
     TIMER_WEEK_NAMES,
+    icon_for,
 )
 from .helpers import as_int, device_info, sum_array
 
@@ -67,6 +68,7 @@ class _BaseSensor(CoordinatorEntity, SensorEntity):
         self._attr_native_unit_of_measurement = description.get("unit")
         self._attr_device_class = description.get("device_class")
         self._attr_state_class = description.get("state_class")
+        self._attr_icon = icon_for("sensor", description["key"])
         self._attr_entity_registry_enabled_default = description.get(
             "enabled_default", True
         )
@@ -161,8 +163,6 @@ class PanasonicHourlyEnergySensor(_BaseSensor):
     as attributes.  255 in setTemperature means "no reading".
     """
 
-    _attr_icon = "mdi:chart-bar"
-
     @property
     def _section(self):
         section = (self.coordinator.data or {}).get(self._description["source"])
@@ -217,8 +217,6 @@ class PanasonicHourlyEnergySensor(_BaseSensor):
 class PanasonicDeviceInfoSensor(_BaseSensor):
     """Firmware version plus cached device metadata and official help links."""
 
-    _attr_icon = "mdi:information-outline"
-
     @property
     def _section(self):
         section = (self.coordinator.data or {}).get(self._description["source"])
@@ -254,8 +252,6 @@ class PanasonicTimerSensor(_BaseSensor):
     fields per capability flag and a malformed write would silently overwrite
     the schedule configured in the official App.
     """
-
-    _attr_icon = "mdi:calendar-clock"
 
     def _parse(self):
         timer = (self.coordinator.data or {}).get(self._description["source"])

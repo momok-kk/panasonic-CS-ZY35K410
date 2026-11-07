@@ -8,7 +8,7 @@ from homeassistant.components.number import NumberEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import PanasonicApiError
-from .const import DOMAIN
+from .const import DOMAIN, icon_for
 from .helpers import device_info
 
 _LOGGER = logging.getLogger(__name__)
@@ -40,7 +40,7 @@ class PanasonicChargeNumber(CoordinatorEntity, NumberEntity):
         self._attr_native_max_value = description["max"]
         self._attr_native_step = description["step"]
         self._attr_native_unit_of_measurement = description["unit"]
-        self._attr_icon = "mdi:currency-cny"
+        self._attr_icon = icon_for("number", self._description["key"])
 
     @property
     def available(self):

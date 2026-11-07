@@ -12,7 +12,7 @@ from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import PanasonicApiError
-from .const import DOMAIN
+from .const import DOMAIN, icon_for, picture_for
 from .helpers import as_int, capability_ok, device_info, resolve_key
 
 _LOGGER = logging.getLogger(__name__)
@@ -52,6 +52,8 @@ class PanasonicRemoteSwitch(CoordinatorEntity, SwitchEntity):
         self._attr_name = f"{entry.title} {description['name']}"
         self._attr_unique_id = f"panasonic_{device.device_id}_{self._key}_switch"
         self._attr_device_info = device_info(device, entry.title)
+        self._attr_icon = icon_for("switch", self._key)
+        self._attr_entity_picture = picture_for("switch", self._key)
 
     @property
     def _data(self):
@@ -101,6 +103,7 @@ class PanasonicTimerSwitch(CoordinatorEntity, SwitchEntity):
             f"panasonic_{device.device_id}_{description['key']}_switch"
         )
         self._attr_device_info = device_info(device, entry.title)
+        self._attr_icon = icon_for("switch", description["key"])
 
     @property
     def _status(self):

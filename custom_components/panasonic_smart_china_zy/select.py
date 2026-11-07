@@ -8,7 +8,7 @@ from homeassistant.components.select import SelectEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import PanasonicApiError
-from .const import DOMAIN
+from .const import DOMAIN, icon_for
 from .helpers import as_int, capability_ok, device_info, resolve_key
 
 _LOGGER = logging.getLogger(__name__)
@@ -49,6 +49,7 @@ class PanasonicRemoteSelect(CoordinatorEntity, SelectEntity):
         self._attr_entity_registry_enabled_default = description.get(
             "enabled_default", True
         )
+        self._attr_icon = icon_for("select", self._key)
         self._attr_device_info = device_info(device, entry.title)
 
     @property

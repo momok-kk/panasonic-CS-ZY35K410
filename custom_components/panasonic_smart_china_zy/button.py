@@ -7,7 +7,7 @@ import logging
 from homeassistant.components.button import ButtonEntity
 
 from .api import PanasonicApiError
-from .const import DOMAIN
+from .const import DOMAIN, icon_for
 from .helpers import device_info
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,6 +39,7 @@ class PanasonicRemoteButton(ButtonEntity):
         self._attr_name = f"{entry.title} {description['name']}"
         self._attr_unique_id = f"panasonic_{device.device_id}_{self._key}_button"
         self._attr_device_info = device_info(device, entry.title)
+        self._attr_icon = icon_for("button", self._key)
 
     @property
     def should_poll(self):

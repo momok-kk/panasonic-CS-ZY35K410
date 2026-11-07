@@ -11,6 +11,8 @@ exactly as the official web app does.  No other controller model, protocol or
 device category is supported.
 """
 
+import base64
+
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.components.climate.const import (
     FAN_AUTO,
@@ -328,6 +330,94 @@ RUN_MODE_COLORS = {
     68: ("#00C101", "绿色", "抽湿"),
     69: ("#7056DC", "紫色", "送风"),
 }
+
+# ---------------------------------------------------------------------------
+# Entity icons.  Without these HA falls back to the platform default (every
+# switch shows the same generic toggle glyph).  All names below were checked
+# against Material Design Icons 7.4.47, the set shipped with current HA.
+# ---------------------------------------------------------------------------
+
+# nanoe brand mark reconstructed from the official App asset: a large disc
+# with a straight right edge plus a small satellite dot, in Panasonic blue.
+# Embedded as a data URI so no static-path registration or external resource
+# is needed; HA renders it through the entity_picture attribute.  The MDI
+# molecule icon below is the fallback for third-party cards that ignore it.
+NANOE_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 32">'
+    '<defs><clipPath id="c"><rect width="22.6" height="32"/></clipPath></defs>'
+    '<circle cx="13" cy="16" r="11" fill="#2C4198" clip-path="url(#c)"/>'
+    '<circle cx="29" cy="16" r="4.6" fill="#2C4198"/>'
+    "</svg>"
+)
+NANOE_ENTITY_PICTURE = (
+    "data:image/svg+xml;base64,"
+    + base64.b64encode(NANOE_SVG.encode("utf-8")).decode("ascii")
+)
+
+ENTITY_ICONS = {
+    "climate": "mdi:air-conditioner",
+    "switch": {
+        "runStatus": "mdi:power",
+        "powerful": "mdi:fan-plus",
+        "selfClean": "mdi:shimmer",
+        "cool": "mdi:water-percent",
+        "elecHeat": "mdi:heat-wave",
+        "nanoe": "mdi:molecule",
+        "sleep": "mdi:sleep",
+        "lamp": "mdi:led-on",
+        "spaceClean": "mdi:air-purifier",
+        "fix_time_status": "mdi:timer-outline",
+    },
+    "button": {
+        "runStatus": "mdi:power-cycle",
+        "filterReset": "mdi:air-filter",
+    },
+    "sensor": {
+        "inhale_temperature": "mdi:thermometer",
+        "alarm_code": "mdi:alert-circle-outline",
+        "energy_today": "mdi:flash",
+        "duration_today": "mdi:clock-outline",
+        "cost_today": "mdi:currency-cny",
+        "energy_month": "mdi:flash",
+        "duration_month": "mdi:clock-outline",
+        "cost_month": "mdi:currency-cny",
+        "energy_year": "mdi:flash",
+        "cost_year": "mdi:currency-cny",
+        "mode_temp_cool": "mdi:snowflake",
+        "mode_temp_heat": "mdi:fire",
+        "mode_temp_dry": "mdi:water-percent",
+        "hourly_energy": "mdi:chart-timeline-variant",
+        "device_info": "mdi:information-outline",
+        "timer_schedule": "mdi:calendar-clock",
+    },
+    "binary_sensor": {
+        "alarm": "mdi:alert-circle",
+        "filter_due": "mdi:air-filter",
+    },
+    "number": {
+        "electricity_charge": "mdi:currency-cny",
+    },
+    "select": {
+        "portraitWindSet": "mdi:arrow-up-down",
+        "orientationWindSet": "mdi:arrow-left-right",
+    },
+}
+
+ENTITY_PICTURES = {
+    "switch": {"nanoe": NANOE_ENTITY_PICTURE},
+}
+
+
+def icon_for(platform, key=None):
+    """Return the MDI icon for an entity, or None to use the HA default."""
+    section = ENTITY_ICONS.get(platform)
+    return section.get(key) if isinstance(section, dict) else section
+
+
+def picture_for(platform, key):
+    """Return an optional entity_picture URL (currently only nanoe)."""
+    return ENTITY_PICTURES.get(platform, {}).get(key)
+
 
 # Feature availability is gated by the matching "*Ex" capability flag in
 # commonStatus, exactly as the official web app's MorePage does.

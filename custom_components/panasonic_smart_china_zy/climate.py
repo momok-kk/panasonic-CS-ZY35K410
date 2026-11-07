@@ -25,6 +25,7 @@ from .const import (
     MODE_COLOR_OFF,
     NO_EXTERNAL_SENSOR,
     RUN_MODE_COLORS,
+    icon_for,
 )
 from .helpers import device_info
 
@@ -60,6 +61,7 @@ class PanasonicACEntity(CoordinatorEntity, ClimateEntity):
         self._attr_name = entry.title
         self._attr_unique_id = f"panasonic_{device.device_id}"
         self._attr_device_info = device_info(device, entry.title)
+        self._attr_icon = icon_for("climate")
 
         self._hvac_map = self._profile.get("hvac_mapping", {})
         self._fan_map = self._profile.get("fan_mapping", {})

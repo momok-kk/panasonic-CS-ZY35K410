@@ -71,6 +71,37 @@
 - **滤网需更换**：`filterReset` 在协议里是一次性复位指令而非状态位，本机 `airconType=0` 也不会触发 App 的滤网提醒
 - **上下 / 左右扫风位置**：与空调卡的两个摆动下拉写同一对字段，属重复入口，保留作备用
 
+## 实体图标
+
+34 个实体全部显式指定图标，不再回退到「所有开关都长一样」的 HA 默认字形。图标名取自 Material Design Icons 7.4.47，已逐个校验存在。
+
+| 类别 | 图标 |
+|---|---|
+| 空调主机 | `mdi:air-conditioner` |
+| 电源 / 电源切换 | `mdi:power` / `mdi:power-cycle` |
+| 强劲运转 | `mdi:fan-plus` |
+| 自清洁 | `mdi:shimmer` |
+| 柔湿制冷 / 辅热 | `mdi:water-percent` / `mdi:heat-wave` |
+| 睡眠 | `mdi:sleep` |
+| 显示灯 | `mdi:led-on` |
+| 空间净化 / 滤网复位 | `mdi:air-purifier` / `mdi:air-filter` |
+| 定时开关 / 定时计划 | `mdi:timer-outline` / `mdi:calendar-clock` |
+| 用电量 / 费用 / 运行时长 | `mdi:flash` / `mdi:currency-cny` / `mdi:clock-outline` |
+| 逐时用电 / 设备信息 | `mdi:chart-timeline-variant` / `mdi:information-outline` |
+| 故障 / 故障码 | `mdi:alert-circle` / `mdi:alert-circle-outline` |
+| 记忆温度（制冷 / 制暖 / 抽湿） | `mdi:snowflake` / `mdi:fire` / `mdi:water-percent` |
+| 上下 / 左右扫风位置 | `mdi:arrow-up-down` / `mdi:arrow-left-right` |
+
+### 纳诺怡品牌图标
+
+MDI 里没有 nanoe 的官方标记，因此按官方 App 资源重绘了一个：深蓝 `#2C4198`，一个右缘被竖直切平的大圆加右侧小圆点。
+
+![nanoe](custom_components/panasonic_smart_china_zy/brand/nanoe.png)
+
+- 集成把这张 SVG 以 `entity_picture` 的 data URI 直接内嵌给纳诺怡开关，HA 原生卡片（设备页、实体行、更多信息）会显示品牌图，不依赖静态路径注册或 `www/` 目录。
+- 忽略 `entity_picture` 的第三方卡片（Mushroom、button-card 等）回退到 `mdi:molecule`。
+- 原始文件：`brand/nanoe.svg`（矢量）、`brand/nanoe.png`（132×128 透明底），可复制到 `/config/www/` 供自定义卡片使用。
+
 ## 安装
 
 ### 方式一：HACS 一键添加（推荐）
@@ -94,7 +125,7 @@
 
 > 目录名必须是 `panasonic_smart_china_zy`（与 `manifest.json` 的 `domain` 一致），改名会导致集成加载失败。
 
-安装完成后，集成名称与图标全部为本地 PNG，不依赖在线资源：`brand/icon.png`（512×512，集成列表方图）、`brand/logo.png`（1024×384，详情页横幅），根目录同名文件用于兼容 2024.11 之前的 HA。
+安装完成后，集成名称与图标全部为本地资源，不依赖在线 CDN：`brand/icon.png`（512×512，集成列表方图）、`brand/logo.png`（1024×384，详情页横幅）、`brand/nanoe.svg` + `brand/nanoe.png`（纳诺怡标记），根目录同名文件用于兼容 2024.11 之前的 HA。
 
 ## 配置
 

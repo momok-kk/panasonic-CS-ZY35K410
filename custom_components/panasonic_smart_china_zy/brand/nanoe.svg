@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 32" width="33" height="32">
+  <!-- Panasonic nanoe ion mark reconstructed from the official App asset:
+       one large disc with a straight right edge + a small satellite dot. -->
+  <defs>
+    <clipPath id="disc-cut"><rect x="0" y="0" width="22.6" height="32"/></clipPath>
+  </defs>
+  <circle cx="13" cy="16" r="11" fill="#2C4198" clip-path="url(#disc-cut)"/>
+  <circle cx="29" cy="16" r="4.6" fill="#2C4198"/>
+</svg>

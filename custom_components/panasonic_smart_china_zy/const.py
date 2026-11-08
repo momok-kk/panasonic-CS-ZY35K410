@@ -342,12 +342,22 @@ RUN_MODE_COLORS = {
 # Embedded as a data URI so no static-path registration or external resource
 # is needed; HA renders it through the entity_picture attribute.  The MDI
 # molecule icon below is the fallback for third-party cards that ignore it.
+#
+# Canvas is 44x44 while the artwork itself is 31.6x22.  HA draws an
+# entity_picture edge-to-edge inside the icon slot, so a tight canvas made the
+# mark look oversized next to the 24px MDI glyphs; the surrounding padding
+# brings the disc down to ~18px in a 36px tile, i.e. the same optical size as a
+# neighbouring icon.  NANOE_CANVAS / NANOE_OFFSET are the tuning knobs.
+NANOE_CANVAS = 44
+NANOE_OFFSET = (4.2, 6)
 NANOE_SVG = (
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 32">'
+    f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {NANOE_CANVAS} {NANOE_CANVAS}"'
+    f' width="{NANOE_CANVAS}" height="{NANOE_CANVAS}">'
     '<defs><clipPath id="c"><rect width="22.6" height="32"/></clipPath></defs>'
+    f'<g transform="translate({NANOE_OFFSET[0]},{NANOE_OFFSET[1]})">'
     '<circle cx="13" cy="16" r="11" fill="#2C4198" clip-path="url(#c)"/>'
     '<circle cx="29" cy="16" r="4.6" fill="#2C4198"/>'
-    "</svg>"
+    "</g></svg>"
 )
 NANOE_ENTITY_PICTURE = (
     "data:image/svg+xml;base64,"

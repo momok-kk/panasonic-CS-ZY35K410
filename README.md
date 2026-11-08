@@ -99,8 +99,9 @@ MDI 里没有 nanoe 的官方标记，因此按官方 App 资源重绘了一个�
 ![nanoe](custom_components/panasonic_smart_china_zy/brand/nanoe.png)
 
 - 集成把这张 SVG 以 `entity_picture` 的 data URI 直接内嵌给纳诺怡开关，HA 原生卡片（设备页、实体行、更多信息）会显示品牌图，不依赖静态路径注册或 `www/` 目录。
+- 画布 44×44，图形本体只占 31.6×22，四周留白让大圆在 36px 图标位里约 18px，与相邻的 24px MDI 图标视觉重量一致（2.6.1 起；此前的紧画布会显得偏大）。
 - 忽略 `entity_picture` 的第三方卡片（Mushroom、button-card 等）回退到 `mdi:molecule`。
-- 原始文件：`brand/nanoe.svg`（矢量）、`brand/nanoe.png`（132×128 透明底），可复制到 `/config/www/` 供自定义卡片使用。
+- 原始文件：`brand/nanoe.svg`（矢量）、`brand/nanoe.png`（176×176 透明底），可复制到 `/config/www/` 供自定义卡片使用。
 
 ## 安装
 

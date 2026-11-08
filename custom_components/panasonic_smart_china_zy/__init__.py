@@ -102,6 +102,7 @@ def _build_entity_map(hass: HomeAssistant, entry: ConfigEntry, device) -> dict:
         "binary_sensor", "switch", "sensor", "button", "number", "select",
     )
     mapping: dict[str, str] = {}
+    candidates: dict[str, list[tuple[str, str]]] = {}
     for reg_entry in registry.entities.values():
         if reg_entry.config_entry_id != entry.entry_id:
             continue
@@ -113,8 +114,23 @@ def _build_entity_map(hass: HomeAssistant, entry: ConfigEntry, device) -> dict:
             for platform in platforms:
                 suffix = f"_{platform}"
                 if rest.endswith(suffix):
-                    mapping[rest[: -len(suffix)]] = reg_entry.entity_id
+                    key = rest[: -len(suffix)]
+                    candidates.setdefault(key, []).append(
+                        (platform, reg_entry.entity_id)
+                    )
                     break
+    # Some keys exist on two platforms (runStatus is both a power switch and
+    # a power-toggle button).  Keep the interactive switch as the short key
+    # and expose each duplicate as <key>__<platform> so no entity is lost.
+    priority = ("switch", "binary_sensor", "sensor", "number", "select", "button")
+    for key, entries in candidates.items():
+        mapping[key] = min(
+            entries,
+            key=lambda item: priority.index(item[0]) if item[0] in priority else 99,
+        )[1]
+        if len(entries) > 1:
+            for platform, entity_id in entries:
+                mapping[f"{key}__{platform}"] = entity_id
     return mapping
 
 

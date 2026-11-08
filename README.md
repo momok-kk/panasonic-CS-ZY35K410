@@ -30,6 +30,7 @@
 - **不写死任何 entity_id**：集成在 climate 实体的 `panasonic_entities` 属性里发布「功能 key → entity_id」映射（按 config entry 隔离），卡片按 key 解析开关、传感器与按钮。用户在松下 App 里怎么命名、装几台都不影响。
 - **多台同型号**：卡片自动列出所有本集成的 climate 实体，顶部出现设备下拉框可切换；也可用 `entity:` 固定其中一台。
 - 可选配置：`name`、`step`、`temp_entity`、`show_charts`、`nanoe_logo`；`switches` / `cost_main` / `cost_extra` 可用带 `id` 的数组覆盖，指向任意 HA 实体。
+- 少数功能 key 会跨平台重名（`runStatus` 既是电源开关又是电源切换按钮）：短键取可交互的 `switch`，另提供 `runStatus__switch` / `runStatus__button` 精确键，映射不会丢实体。
 - 若以前手动注册过 `/local/panasonic-climate-card.js`，请删除那条资源并强制刷新浏览器，避免旧版抢占元素注册。
 
 ## 功能

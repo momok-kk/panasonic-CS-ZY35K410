@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-import logging
-
 from homeassistant.components.button import ButtonEntity
 
-from .api import PanasonicApiError
+from .api import async_run_command
 from .const import DOMAIN, icon_for
 from .helpers import device_info
-
-_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -65,7 +61,8 @@ class PanasonicRemoteButton(ButtonEntity):
         await self._send({self._key: value})
 
     async def _send(self, changes):
-        try:
-            await self._device.send_command(changes)
-        except PanasonicApiError as err:
-            _LOGGER.error("Button %s failed: %s", self._key, err)
+        await async_run_command(
+            self._device,
+            self._device.send_command(changes),
+            f"按钮 {self._key}",
+        )

@@ -11,8 +11,6 @@ exactly as the official web app does.  No other controller model, protocol or
 device category is supported.
 """
 
-import base64
-
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.components.climate.const import (
     FAN_AUTO,
@@ -342,33 +340,11 @@ RUN_MODE_COLORS = {
 # against Material Design Icons 7.4.47, the set shipped with current HA.
 # ---------------------------------------------------------------------------
 
-# nanoe brand mark reconstructed from the official App asset: a large disc
-# with a straight right edge plus a small satellite dot, in Panasonic blue.
-# Embedded as a data URI so no static-path registration or external resource
-# is needed; HA renders it through the entity_picture attribute.  The MDI
-# molecule icon below is the fallback for third-party cards that ignore it.
-#
-# Canvas is 44x44 while the artwork itself is 31.6x22.  HA draws an
-# entity_picture edge-to-edge inside the icon slot, so a tight canvas made the
-# mark look oversized next to the 24px MDI glyphs; the surrounding padding
-# brings the disc down to ~18px in a 36px tile, i.e. the same optical size as a
-# neighbouring icon.  NANOE_CANVAS / NANOE_OFFSET are the tuning knobs.
-NANOE_CANVAS = 44
-NANOE_OFFSET = (4.2, 6)
-NANOE_SVG = (
-    f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {NANOE_CANVAS} {NANOE_CANVAS}"'
-    f' width="{NANOE_CANVAS}" height="{NANOE_CANVAS}">'
-    '<defs><clipPath id="c"><rect width="22.6" height="32"/></clipPath></defs>'
-    f'<g transform="translate({NANOE_OFFSET[0]},{NANOE_OFFSET[1]})">'
-    '<circle cx="13" cy="16" r="11" fill="#2C4198" clip-path="url(#c)"/>'
-    '<circle cx="29" cy="16" r="4.6" fill="#2C4198"/>'
-    "</g></svg>"
-)
-NANOE_ENTITY_PICTURE = (
-    "data:image/svg+xml;base64,"
-    + base64.b64encode(NANOE_SVG.encode("utf-8")).decode("ascii")
-)
-
+# MDI has no nanoe glyph.  The `panasonic:nanoe` icon below comes from the
+# icon set in frontend/panasonic_icons.js, which __init__.py registers during
+# async_setup().  Using it as the default entity icon (instead of an
+# entity_picture data URI) means every card renders the same mark and it
+# follows the frontend theme colour.
 ENTITY_ICONS = {
     "climate": "mdi:air-conditioner",
     "switch": {
@@ -377,7 +353,7 @@ ENTITY_ICONS = {
         "selfClean": "mdi:shimmer",
         "cool": "mdi:water-percent",
         "elecHeat": "mdi:heat-wave",
-        "nanoe": "mdi:molecule",
+        "nanoe": "panasonic:nanoe",
         "sleep": "mdi:sleep",
         "lamp": "mdi:led-on",
         "spaceClean": "mdi:air-purifier",
@@ -418,20 +394,10 @@ ENTITY_ICONS = {
     },
 }
 
-ENTITY_PICTURES = {
-    "switch": {"nanoe": NANOE_ENTITY_PICTURE},
-}
-
-
 def icon_for(platform, key=None):
-    """Return the MDI icon for an entity, or None to use the HA default."""
+    """Return the icon for an entity, or None to use the HA default."""
     section = ENTITY_ICONS.get(platform)
     return section.get(key) if isinstance(section, dict) else section
-
-
-def picture_for(platform, key):
-    """Return an optional entity_picture URL (currently only nanoe)."""
-    return ENTITY_PICTURES.get(platform, {}).get(key)
 
 
 # Feature availability is gated by the matching "*Ex" capability flag in

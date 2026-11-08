@@ -6,16 +6,12 @@ Entity unique_ids are kept stable: "key" is the legacy identifier while
 
 from __future__ import annotations
 
-import logging
-
 from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .api import PanasonicApiError
-from .const import DOMAIN, icon_for, picture_for
+from .api import async_run_command
+from .const import DOMAIN, icon_for
 from .helpers import as_int, capability_ok, device_info, resolve_key
-
-_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -53,7 +49,6 @@ class PanasonicRemoteSwitch(CoordinatorEntity, SwitchEntity):
         self._attr_unique_id = f"panasonic_{device.device_id}_{self._key}_switch"
         self._attr_device_info = device_info(device, entry.title)
         self._attr_icon = icon_for("switch", self._key)
-        self._attr_entity_picture = picture_for("switch", self._key)
 
     @property
     def _data(self):
@@ -77,10 +72,11 @@ class PanasonicRemoteSwitch(CoordinatorEntity, SwitchEntity):
         return as_int(self._data.get(self._active_key)) == self._on_value
 
     async def _set(self, value):
-        try:
-            await self._device.send_command({self._active_key: value})
-        except PanasonicApiError as err:
-            _LOGGER.error("Switch %s command failed: %s", self._key, err)
+        await async_run_command(
+            self._device,
+            self._device.send_command({self._active_key: value}),
+            f"开关 {self._key}",
+        )
 
     async def async_turn_on(self, **kwargs):
         await self._set(self._on_value)
@@ -125,13 +121,11 @@ class PanasonicTimerSwitch(CoordinatorEntity, SwitchEntity):
         )
 
     async def _set(self, value):
-        try:
-            await self._device.set_fix_time_status(
-                value == self._description["on"]
-            )
-        except PanasonicApiError as err:
-            _LOGGER.error("Timer switch command failed: %s", err)
-            return
+        await async_run_command(
+            self._device,
+            self._device.set_fix_time_status(value == self._description["on"]),
+            "定时开关",
+        )
         data = dict(self.coordinator.data or {})
         section = dict(data.get(self._description["source"]) or {})
         section[self._description["field"]] = value

@@ -37,8 +37,9 @@ async def _async_register_iconset(hass: HomeAssistant, domain_data: dict) -> Non
     """
     if domain_data.get("iconset_registered"):
         return
-    domain_data["iconset_registered"] = True
     if hass.http is None:
+        # HTTP may not be ready during async_setup; the entry setup retries.
+        _LOGGER.debug("HTTP not ready yet; deferring panasonic icon set")
         return
     try:
         from homeassistant.components.frontend import add_extra_js_url
@@ -56,9 +57,15 @@ async def _async_register_iconset(hass: HomeAssistant, domain_data: dict) -> Non
             [StaticPathConfig(_ICONSET_URL, _ICONSET_FILE, True)]
         )
         add_extra_js_url(hass, f"{_ICONSET_URL}?v={version}")
+        # Only mark as done once both steps succeed, so a reload can retry.
+        domain_data["iconset_registered"] = True
         _LOGGER.debug("Registered panasonic icon set at %s", _ICONSET_URL)
     except Exception:  # noqa: BLE001 - cosmetic feature, never block setup
-        _LOGGER.debug("Unable to register the panasonic icon set", exc_info=True)
+        _LOGGER.warning(
+            "Unable to register the panasonic icon set; panasonic:nanoe "
+            "will render blank until the integration is reloaded",
+            exc_info=True,
+        )
 
 
 async def async_setup(hass: HomeAssistant, config: dict):
@@ -71,8 +78,10 @@ async def async_setup(hass: HomeAssistant, config: dict):
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up one device with two shared coordinators."""
     domain_data = hass.data.setdefault(DOMAIN, {"session": None})
+    # Idempotent: retries icon registration if HTTP was not ready at startup.
+    await _async_register_iconset(hass, domain_data)
 
-    device = PanasonicSmartDevice(hass, entry.data, entry.title)
+    device = PanasonicSmartDevice(hass, entry.data, entry.title, entry)
     status = PanasonicStatusCoordinator(hass, device, entry)
     aux = PanasonicAuxCoordinator(hass, device, entry)
     device.attach_coordinator(status)

@@ -1,0 +1,42 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Sign in to Panasonic",
+        "description": "Enter the credentials of your Panasonic Smart App (China) account.\nThe session is cached on first login; when it expires, reauthentication refreshes it without changing devices or entity IDs.",
+        "data": {
+          "username": "Phone number / email",
+          "password": "Password"
+        }
+      },
+      "device": {
+        "title": "Select a device",
+        "description": "Devices found. This integration supports only the CS-ZY35K410 (AirconCommon); choose the air conditioner to add.",
+        "data": {
+          "deviceId": "Air conditioner",
+          "sensor_entity_id": "External room temperature sensor (optional)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Sign in to Panasonic again",
+        "description": "The cloud session has expired (auth error 4102). Enter your credentials to refresh the SSID.\nNote: Panasonic accounts allow a single session, so signing in here signs the phone app out. Device and entity IDs are unchanged.",
+        "data": {
+          "username": "Phone number / email",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Login failed: check your credentials or network connection",
+      "token_generation_failed": "Token generation failed: unexpected device ID format",
+      "no_devices_found": "No devices found: make sure an air conditioner is bound to this account",
+      "all_devices_configured": "All devices have already been added"
+    },
+    "abort": {
+      "already_configured": "This device is already configured",
+      "reauth_successful": "Reauthentication successful",
+      "no_devices_found": "No devices found: make sure a CS-ZY35K410 is bound to this account",
+      "all_devices_configured": "All devices have already been added"
+    }
+  }
+}

@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-import logging
-
 from homeassistant.components.number import NumberEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .api import PanasonicApiError
+from .api import async_run_command
 from .const import DOMAIN, icon_for
 from .helpers import device_info
-
-_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -63,9 +59,9 @@ class PanasonicChargeNumber(CoordinatorEntity, NumberEntity):
             return None
 
     async def async_set_native_value(self, value: float) -> None:
-        try:
-            await self._device.set_charge(value)
-        except PanasonicApiError as err:
-            _LOGGER.error("Failed to set electricity price: %s", err)
-            return
+        await async_run_command(
+            self._device,
+            self._device.set_charge(value),
+            "设置电价",
+        )
         await self.coordinator.async_request_refresh()

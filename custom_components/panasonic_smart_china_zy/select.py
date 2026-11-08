@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-import logging
-
 from homeassistant.components.select import SelectEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .api import PanasonicApiError
+from .api import async_run_command
 from .const import DOMAIN, icon_for
 from .helpers import as_int, capability_ok, device_info, resolve_key
-
-_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -77,7 +73,8 @@ class PanasonicRemoteSelect(CoordinatorEntity, SelectEntity):
         value = self._options_map.get(option)
         if value is None:
             return
-        try:
-            await self._device.send_command({self._active_key: value})
-        except PanasonicApiError as err:
-            _LOGGER.error("Select %s command failed: %s", self._key, err)
+        await async_run_command(
+            self._device,
+            self._device.send_command({self._active_key: value}),
+            f"设置扫风位置 {self._key}",
+        )

@@ -74,13 +74,19 @@ def resolve_key(params, key, aliases=()):
 
 
 def sum_array(value):
-    """Sum a numeric list returned by a monthly/yearly graph endpoint."""
+    """Sum a numeric list, ignoring placeholders for future time slots.
+
+    The graph endpoints return null/empty entries for hours or days that have
+    not happened yet; such an entry must not discard the whole sum.
+    """
     if not isinstance(value, list):
         return None
     total = 0.0
+    found = False
     for item in value:
         try:
             total += float(item)
         except (TypeError, ValueError):
-            return None
-    return round(total, 3)
+            continue
+        found = True
+    return round(total, 3) if found else None

@@ -7,7 +7,7 @@
   "after_dependencies": ["frontend"],
   "codeowners": ["@609293964"],
   "requirements": [],
-  "version": "2.6.2",
+  "version": "2.6.3",
   "iot_class": "cloud_polling",
   "config_flow": true
 }

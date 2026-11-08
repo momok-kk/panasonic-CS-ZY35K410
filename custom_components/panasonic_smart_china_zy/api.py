@@ -7,7 +7,9 @@ import time
 
 import async_timeout
 
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.util import dt as dt_util
 
 from .const import (
     AUTH_ERROR_CODES,
@@ -41,28 +43,33 @@ from .const import (
     URL_GET,
     URL_SET,
 )
-from .helpers import business_error_code, error_message
+from .helpers import as_int, business_error_code, error_message
 
 _LOGGER = logging.getLogger(__name__)
 
+# Date parameters must follow the timezone configured in Home Assistant, not
+# the container clock (which is often UTC).  The cloud reports Beijing time.
 AUX_ENDPOINTS = {
     "electricity_today": (ENDPOINT_ELEC_TODAY, None),
     "electricity_month": (
         ENDPOINT_ELEC_MONTH,
-        lambda: {"time": time.strftime("%Y%m%d")},
+        lambda: {"time": dt_util.now().strftime("%Y%m%d")},
     ),
     "electricity_year": (
         ENDPOINT_ELEC_YEAR,
-        lambda: {"time": time.strftime("%Y-%m-%d")},
+        lambda: {"time": dt_util.now().strftime("%Y-%m-%d")},
     ),
     "electricity_charge": (ENDPOINT_CHARGE_GET, None),
     "mode_temp": (ENDPOINT_MODE_TEMP, None),
     "timer": (ENDPOINT_TIMER_GET, None),
     "timer_status": (ENDPOINT_FIX_STATUS_GET, None),
-    "hourly": (ENDPOINT_DAY_GRAPH, lambda: {"time": time.strftime("%Y%m%d")}),
+    "hourly": (
+        ENDPOINT_DAY_GRAPH,
+        lambda: {"time": dt_util.now().strftime("%Y%m%d")},
+    ),
     "month_graph": (
         ENDPOINT_MONTH_GRAPH,
-        lambda: {"time": time.strftime("%Y%m")},
+        lambda: {"time": dt_util.now().strftime("%Y%m")},
     ),
 }
 # Live responses (2026-11-06):
@@ -95,11 +102,31 @@ class PanasonicAuthError(PanasonicApiError):
     """Session expired or invalid; triggers HA reauthentication."""
 
 
+async def async_run_command(device, awaitable, action):
+    """Run a cloud write and surface failures to the HA service caller.
+
+    Entity service calls used to swallow errors, so a rejected command looked
+    successful in the UI.  Auth failures additionally start the reauth flow
+    right away instead of waiting for the next status poll to notice the
+    stale session.
+    """
+    try:
+        return await awaitable
+    except PanasonicAuthError as err:
+        device.request_reauth()
+        raise HomeAssistantError(
+            f"{action}失败：松下账号会话已过期，请重新登录"
+        ) from err
+    except PanasonicApiError as err:
+        raise HomeAssistantError(f"{action}失败：{err}") from err
+
+
 class PanasonicSmartDevice:
     """One device: a single shared client for all of its entities."""
 
-    def __init__(self, hass, config, name):
+    def __init__(self, hass, config, name, entry=None):
         self.hass = hass
+        self.entry = entry
         self.usr_id = config[CONF_USR_ID]
         self.device_id = config[CONF_DEVICE_ID]
         self.token = config[CONF_TOKEN]
@@ -117,10 +144,35 @@ class PanasonicSmartDevice:
         self.detected_temp_scale = None
         self._device_meta = {}
         self._device_meta_ts = 0.0
+        self._device_meta_fetched = False
+        self._read_error_logged = False
 
     def attach_coordinator(self, coordinator):
         """Bind the shared status coordinator for push updates."""
         self._coordinator = coordinator
+
+    def request_reauth(self):
+        """Start the reauth flow when a write reports an expired session.
+
+        Older HA releases expose this on the entry, newer ones may move it;
+        the status coordinator still triggers reauth on its next poll, so a
+        missing helper must never break the service call.
+        """
+        if self.entry is None:
+            return
+        starter = getattr(self.entry, "async_start_reauth", None)
+        if callable(starter):
+            starter(self.hass)
+        else:
+            _LOGGER.debug("Reauth will be triggered by the next status poll")
+
+    def _log_read_failure(self, message, *args):
+        """Warn once per failure streak, then fall back to debug to avoid spam."""
+        if self._read_error_logged:
+            _LOGGER.debug(message, *args)
+        else:
+            _LOGGER.warning(message, *args)
+            self._read_error_logged = True
 
     @property
     def power_on_value(self):
@@ -143,7 +195,7 @@ class PanasonicSmartDevice:
         return DEVICE_PROFILE["current_temperature_keys"]
 
     def is_on(self, params):
-        return params.get("runStatus") == self.power_on_value
+        return as_int(params.get("runStatus")) == as_int(self.power_on_value)
 
     def read_target_temperature(self, params, fallback=26.0):
         """Read set temperature, tolerating both x1 and x2 firmware.
@@ -168,8 +220,7 @@ class PanasonicSmartDevice:
 
     def build_temperature_payload(self, temperature):
         """Write a setpoint using the scale observed in the last status read."""
-        raw = self.last_params.get(self.temperature_keys[0])
-        scale = 2 if raw is not None and (self._as_float(raw) or 0) > 45 else 1
+        scale = self.detected_temp_scale or 1
         return {self.temperature_keys[0]: int(round(temperature * scale))}
 
     @staticmethod
@@ -238,16 +289,18 @@ class PanasonicSmartDevice:
             if not isinstance(results, dict) or "runStatus" not in results:
                 raise PanasonicApiError("Status response missing runStatus")
             self.last_params = results
+            self._read_error_logged = False
             return results
         except PanasonicAuthError:
             raise
         except Exception as err:
-            _LOGGER.debug("Fetch status failed: %s", err)
+            self._log_read_failure("Fetch status failed: %s", err)
             return None
 
     async def fetch_aux(self):
         """Fetch read-only electricity statistics (one request per section)."""
         result = {}
+        failures = 0
         for section, (path, params_builder) in AUX_ENDPOINTS.items():
             payload = {
                 "id": 100,
@@ -264,8 +317,13 @@ class PanasonicSmartDevice:
             except PanasonicAuthError:
                 raise
             except Exception as err:
-                _LOGGER.debug("Aux endpoint %s failed: %s", path, err)
+                failures += 1
+                self._log_read_failure("Aux endpoint %s failed: %s", path, err)
                 result[section] = {}
+        if failures == len(AUX_ENDPOINTS):
+            # Without this the coordinator would report success with an
+            # all-empty dataset and never back off.
+            raise PanasonicApiError("All auxiliary endpoints failed")
         result["device_meta"] = await self.fetch_device_meta()
         return result
 
@@ -277,10 +335,11 @@ class PanasonicSmartDevice:
         inside "results", so both response shapes are accepted.
         """
         now = time.monotonic()
-        if self._device_meta and now - self._device_meta_ts < DEVICE_META_TTL:
+        if self._device_meta_fetched and now - self._device_meta_ts < DEVICE_META_TTL:
             return dict(self._device_meta)
 
         raw = {}
+        succeeded = 0
         for label, (path, params_builder) in STATIC_ENDPOINTS.items():
             payload = {
                 "id": 100,
@@ -294,10 +353,13 @@ class PanasonicSmartDevice:
                 data = await self._post(f"{URL_BASE}/{path}", payload)
                 section = data.get("results")
                 raw[label] = section if isinstance(section, dict) else data
+                succeeded += 1
             except PanasonicAuthError:
                 raise
             except Exception as err:
-                _LOGGER.debug("Device meta endpoint %s failed: %s", path, err)
+                self._log_read_failure(
+                    "Device meta endpoint %s failed: %s", path, err
+                )
                 raw[label] = {}
 
         fw = raw.get("fw_version") or {}
@@ -315,9 +377,12 @@ class PanasonicSmartDevice:
             "problem_links": help_links.get("problem"),
         }
         meta = {key: value for key, value in meta.items() if value is not None}
-        if meta.get("version"):
+        if succeeded:
+            # Cache even a partial/empty result: otherwise one failed metadata
+            # endpoint makes every 60s poll hammer all five endpoints again.
             self._device_meta = meta
             self._device_meta_ts = now
+            self._device_meta_fetched = True
         return meta
 
     async def set_charge(self, value):

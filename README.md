@@ -35,7 +35,7 @@
 ### 电量统计
 
 - 今日 / 本月 / 本年：用电量（kWh）、费用（¥）、运行时长（分钟）
-- **逐时用电**：24 点数组，可直接接 `statistics-graph` 或 apexcharts 画曲线
+- **逐时用电**：24 点数组放在实体属性 `hourly_power_kwh`，适合 apexcharts 等自定义卡片画曲线（该实体不带 `state_class`，不生成长期统计）
 - 本月每日电量与费用、30 天曲线、记忆风速等明细，作为属性挂在对应实体上，不额外占用实体
 - 电量为 `total_increasing`，可直接进 HA 能源面板
 
@@ -73,7 +73,7 @@
 
 ## 实体图标
 
-34 个实体全部显式指定图标，不再回退到「所有开关都长一样」的 HA 默认字形。图标名取自 Material Design Icons 7.4.47，已逐个校验存在。
+34 个实体全部显式指定图标，不再回退到「所有开关都长一样」的 HA 默认字形。除纳诺怡使用集成自带图标集外，图标名取自 Material Design Icons 7.4.47，已逐个校验存在。
 
 | 类别 | 图标 |
 |---|---|
@@ -91,30 +91,23 @@
 | 故障 / 故障码 | `mdi:alert-circle` / `mdi:alert-circle-outline` |
 | 记忆温度（制冷 / 制暖 / 抽湿） | `mdi:snowflake` / `mdi:fire` / `mdi:water-percent` |
 | 上下 / 左右扫风位置 | `mdi:arrow-up-down` / `mdi:arrow-left-right` |
+| 纳诺怡 | `panasonic:nanoe`（集成自带图标集） |
 
-### 纳诺怡品牌图标
+### 纳诺怡：`panasonic:nanoe`
 
-MDI 里没有 nanoe 的官方标记，因此按官方 App 资源重绘了一个：深蓝 `#2C4198`，一个右缘被竖直切平的大圆加右侧小圆点。
+MDI 共 7447 个图标，**没有 `nanoe`**（连别名与标签都没有），所以图标选择器里搜到的同名项没有路径，选中后是一片空白——那不是一个可用的 MDI 图标。因此按官方 App 资源重绘了这个标记：右缘被竖直切平的大圆加右侧小圆点。
 
 ![nanoe](custom_components/panasonic_smart_china_zy/brand/nanoe.png)
 
-- 集成把这张 SVG 以 `entity_picture` 的 data URI 直接内嵌给纳诺怡开关，HA 原生卡片（设备页、实体行、更多信息）会显示品牌图，不依赖静态路径注册或 `www/` 目录。
-- 画布 44×44，图形本体只占 31.6×22，四周留白让大圆在 36px 图标位里约 18px，与相邻的 24px MDI 图标视觉重量一致（2.6.1 起；此前的紧画布会显得偏大）。
-- 忽略 `entity_picture` 的第三方卡片（Mushroom、button-card 等）回退到 `mdi:molecule`。
-- 原始文件：`brand/nanoe.svg`（矢量）、`brand/nanoe.png`（176×176 透明底），可复制到 `/config/www/` 供自定义卡片使用。
+集成把它注册成真正的图标集，纳诺怡开关的**默认图标就是 `panasonic:nanoe`**（2.6.3 起）：
 
-### 可作为图标选择的 `panasonic:nanoe`（2.6.2 起）
+- 由 `frontend/panasonic_icons.js` 通过 `window.customIcons` 注册 `panasonic:` 前缀，`__init__.py` 在集成启动时注册静态路径并以带版本号的 URL 注入前端，无需手动添加资源；
+- 不再使用 `entity_picture` / 内嵌 data URI，HA 原生卡片与第三方卡片（Mushroom、button-card 等）显示同一图标；
+- 在任意图标选择器里搜索 `nanoe`、`纳诺怡`、`panasonic` 都能列出并正常渲染，也可用于其它实体、卡片、自动化；
+- 44×44 画布留白后，大圆在 36px 图标位里约 18px，与相邻的 24px MDI 图标视觉重量一致；
+- 填充跟随主题色（`currentColor`），深色主题下比固定深蓝 `#2C4198` 更清晰；`brand/nanoe.svg` / `brand/nanoe.png` 保留深蓝原图，可复制到 `/config/www/` 供自定义卡片使用。
 
-MDI 共 7447 个图标，**没有 `nanoe`**（连别名与标签都没有），所以图标选择器里搜到的同名项没有路径，选中后是一片空白——那不是一个可用的 MDI 图标。
-
-集成现在自带一个图标集，把纳诺怡标记注册为 `panasonic:nanoe`：
-
-- 在任意图标选择器里搜索 `nanoe`、`纳诺怡`、`panasonic` 都能列出并正常渲染；
-- 可用于实体图标、卡片、自动化等一切接受 `mdi:` 的位置；
-- 由 `frontend/panasonic_icons.js` 通过 `window.customIcons` 注册，`__init__.py` 注册静态路径并以带版本号的 URL 注入前端，无需手动添加资源；
-- 几何与 `brand/nanoe.svg` 完全一致（44×44 画布、同一偏移），唯一区别是填充跟随主题色（`currentColor`），深色主题下比固定深蓝更清晰。
-
-技术背景：HA 前端对非 MDI 前缀的图标，若 `window.customIcons` 中没有对应图标集，会退回已在现代前端中移除的 `<iron-icon>`，表现即为空白。
+技术背景：HA 前端对非 MDI 前缀的图标，若 `window.customIcons` 中没有对应图标集，会退回已在现代前端中移除的 `<iron-icon>`，表现即为空白。也正因为图标由集成注入前端，**卸载或停用集成后 `panasonic:` 前缀失效**，已手动选用该图标的地方会显示空白。
 
 ## 安装
 
@@ -139,7 +132,7 @@ MDI 共 7447 个图标，**没有 `nanoe`**（连别名与标签都没有），�
 
 > 目录名必须是 `panasonic_smart_china_zy`（与 `manifest.json` 的 `domain` 一致），改名会导致集成加载失败。
 
-安装完成后，集成名称与图标全部为本地资源，不依赖在线 CDN：`brand/icon.png`（512×512，集成列表方图）、`brand/logo.png`（1024×384，详情页横幅）、`brand/nanoe.svg` + `brand/nanoe.png`（纳诺怡标记），根目录同名文件用于兼容 2024.11 之前的 HA。
+安装完成后，集成名称与图标全部为本地资源，不依赖在线 CDN：`brand/icon.png`（512×512，集成列表方图）、`brand/logo.png`（1024×384，详情页横幅）、`brand/nanoe.svg` + `brand/nanoe.png`（纳诺怡标记原图，仅供参考）、`frontend/panasonic_icons.js`（实际使用的图标集），根目录同名文件用于兼容 2024.11 之前的 HA。
 
 ## 配置
 

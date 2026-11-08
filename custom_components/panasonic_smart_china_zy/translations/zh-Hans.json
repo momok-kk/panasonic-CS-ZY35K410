@@ -34,14 +34,9 @@
     },
     "abort": {
       "already_configured": "该设备已配置",
-      "reauth_successful": "重新认证成功"
-    }
-  },
-  "entity": {
-    "climate": {
-      "panasonic_ac": {
-        "name": "松下空调"
-      }
+      "reauth_successful": "重新认证成功",
+      "no_devices_found": "未找到设备：请确保账号下已绑定 CS-ZY35K410 空调",
+      "all_devices_configured": "所有设备均已添加，无需重复配置"
     }
   }
 }

@@ -18,7 +18,7 @@ from homeassistant.const import (
 )
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .api import PanasonicApiError
+from .api import async_run_command
 from .const import (
     CONF_SENSOR_ID,
     DOMAIN,
@@ -82,8 +82,17 @@ class PanasonicACEntity(CoordinatorEntity, ClimateEntity):
 
     @staticmethod
     def _mode_from_value(mode_map, value, current_mode=None):
+        # The status bean occasionally returns numeric fields as strings.
+        try:
+            numeric = int(value)
+        except (TypeError, ValueError):
+            numeric = None
         for name, mapped_value in mode_map.items():
-            if mapped_value == value:
+            try:
+                mapped = int(mapped_value)
+            except (TypeError, ValueError):
+                continue
+            if numeric is not None and mapped == numeric:
                 return name
         return current_mode or PanasonicACEntity._first_mode(mode_map)
 
@@ -277,7 +286,8 @@ class PanasonicACEntity(CoordinatorEntity, ClimateEntity):
         await self._send_command({"runStatus": self._device.power_off_value})
 
     async def _send_command(self, changes):
-        try:
-            await self._device.send_command(changes)
-        except PanasonicApiError as err:
-            _LOGGER.error("Climate command %s failed: %s", changes, err)
+        await async_run_command(
+            self._device,
+            self._device.send_command(changes),
+            "空调控制",
+        )

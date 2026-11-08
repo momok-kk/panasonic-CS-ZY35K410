@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-import logging
-
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
@@ -17,8 +15,6 @@ from .const import (
     icon_for,
 )
 from .helpers import as_int, device_info, sum_array
-
-_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -180,7 +176,7 @@ class PanasonicHourlyEnergySensor(_BaseSensor):
     @property
     def native_value(self):
         power = self._section.get("power")
-        hour = datetime.now().hour
+        hour = dt_util.now().hour
         if not isinstance(power, list) or hour >= len(power):
             return None
         try:
@@ -195,7 +191,7 @@ class PanasonicHourlyEnergySensor(_BaseSensor):
         if not isinstance(power, list) or not power:
             return None
         attributes = {
-            "date": datetime.now().strftime("%Y-%m-%d"),
+            "date": dt_util.now().strftime("%Y-%m-%d"),
             "hourly_power_kwh": power,
             "hourly_cost_cny": section.get("cost"),
             "hourly_set_temperature": section.get("setTemperature"),
@@ -317,7 +313,7 @@ class PanasonicTimerSensor(_BaseSensor):
             else False
         )
 
-        now = datetime.now()
+        now = dt_util.now()
         today = now.weekday()
         now_minutes = now.hour * 60 + now.minute
         next_item = None

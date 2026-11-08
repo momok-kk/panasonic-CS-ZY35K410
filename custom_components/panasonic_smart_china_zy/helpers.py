@@ -5,6 +5,26 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from .const import DOMAIN, SUCCESS_ERROR_CODES
 
 
+class ZY35K410Entity:
+    """Give new entities a stable, model-prefixed object id.
+
+    Overriding suggested_object_id (rather than the friendly name) keeps the
+    name coming from the Panasonic app while making fresh-install entity_ids
+    predictable, e.g. switch.zy35k410_nanoe.  Existing entity registry entries
+    keep their entity_id, so upgrading never renames anything.  When a user
+    owns several units of this model, HA disambiguates the second one with a
+    numeric suffix; the bundled card groups by device, not by entity_id.
+    """
+
+    @property
+    def suggested_object_id(self):
+        key = getattr(self, "_key", None)
+        if key is None:
+            description = getattr(self, "_description", None)
+            key = description.get("key") if isinstance(description, dict) else None
+        return f"ZY35K410_{key}" if key else "ZY35K410"
+
+
 def device_info(device, name):
     """Group every entity of one AC under a single HA device."""
     return DeviceInfo(

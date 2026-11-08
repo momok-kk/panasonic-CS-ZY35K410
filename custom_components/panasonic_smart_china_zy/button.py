@@ -6,7 +6,7 @@ from homeassistant.components.button import ButtonEntity
 
 from .api import async_run_command
 from .const import DOMAIN, icon_for
-from .helpers import device_info
+from .helpers import ZY35K410Entity, device_info
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -22,7 +22,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(entities)
 
 
-class PanasonicRemoteButton(ButtonEntity):
+class PanasonicRemoteButton(ZY35K410Entity, ButtonEntity):
     """Stateless command button; availability follows the shared coordinator."""
 
     def __init__(self, coordinator, device, entry, description):

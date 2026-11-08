@@ -28,7 +28,7 @@ from .const import (
     RUN_MODE_COLORS,
     icon_for,
 )
-from .helpers import device_info
+from .helpers import ZY35K410Entity, device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities([PanasonicACEntity(coordinator, device, entry)])
 
 
-class PanasonicACEntity(CoordinatorEntity, ClimateEntity):
+class PanasonicACEntity(ZY35K410Entity, CoordinatorEntity, ClimateEntity):
     """Main AC control; state is pushed by the shared coordinator."""
 
     def __init__(self, coordinator, device, entry):
@@ -225,6 +225,11 @@ class PanasonicACEntity(CoordinatorEntity, ClimateEntity):
             attributes["device_diagnostics"] = diagnostics
         if capabilities:
             attributes["capabilities"] = capabilities
+        entity_map = getattr(self._device, "entity_map", None)
+        if entity_map:
+            # Lets the bundled card resolve every switch/sensor of THIS device
+            # without hardcoding entity_ids (names differ per user/device).
+            attributes["panasonic_entities"] = dict(entity_map)
         return attributes
 
     @property

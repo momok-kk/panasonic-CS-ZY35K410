@@ -14,7 +14,7 @@ from .const import (
     TIMER_WEEK_NAMES,
     icon_for,
 )
-from .helpers import as_int, device_info, sum_array
+from .helpers import ZY35K410Entity, as_int, device_info, sum_array
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -49,7 +49,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(entities)
 
 
-class _BaseSensor(CoordinatorEntity, SensorEntity):
+class _BaseSensor(ZY35K410Entity, CoordinatorEntity, SensorEntity):
     """Common naming, identity and device grouping."""
 
     def __init__(self, coordinator, device, entry, description):

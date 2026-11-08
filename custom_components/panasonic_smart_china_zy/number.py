@@ -7,7 +7,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import async_run_command
 from .const import DOMAIN, icon_for
-from .helpers import device_info
+from .helpers import ZY35K410Entity, device_info
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -20,7 +20,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities([PanasonicChargeNumber(aux, device, entry, description)])
 
 
-class PanasonicChargeNumber(CoordinatorEntity, NumberEntity):
+class PanasonicChargeNumber(ZY35K410Entity, CoordinatorEntity, NumberEntity):
     """Unit price used by the App's electricity-cost charts."""
 
     def __init__(self, coordinator, device, entry, description):

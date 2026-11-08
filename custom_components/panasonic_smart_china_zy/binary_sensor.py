@@ -6,7 +6,7 @@ from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, icon_for
-from .helpers import as_int, device_info
+from .helpers import ZY35K410Entity, as_int, device_info
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -22,7 +22,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(entities)
 
 
-class PanasonicBinarySensor(CoordinatorEntity, BinarySensorEntity):
+class PanasonicBinarySensor(ZY35K410Entity, CoordinatorEntity, BinarySensorEntity):
     """A status flag (non-zero error, filter due, fresh-air running)."""
 
     def __init__(self, coordinator, device, entry, description):

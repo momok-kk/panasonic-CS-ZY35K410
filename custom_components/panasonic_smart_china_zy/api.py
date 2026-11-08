@@ -148,6 +148,9 @@ class PanasonicSmartDevice:
         self._aux_coordinator = None
         self._verify_unsub = {}
         self.firmware_version = None
+        # Filled by __init__.py once the platforms have registered entities;
+        # published on the climate entity for the bundled Lovelace card.
+        self.entity_map = {}
         # Set from the live setTemperature value; shared with temperature sensors.
         self.detected_temp_scale = None
         self._device_meta = {}

@@ -9,7 +9,7 @@
 
 **只支持这一个型号**——代码里没有其它机型、控制器或旧协议的兼容分支，配置时也只认 `0900 / CS-ZY35K410` 这一种设备，多设备账号下其余空调不会出现在选择列表里。
 
-**34 个实体（默认启用 30 个）**，支持：完整空调控制、电量与电费统计、逐时用电曲线、指示灯与纳诺怡等九路功能开关、定时计划、故障诊断。
+**34 个实体（默认启用 30 个）**，支持：完整空调控制、电量与电费统计、逐时用电曲线、指示灯与纳诺怡等九路功能开关、定时计划、故障诊断，并**自带开箱即用的空调控制卡片**。
 
 ## 界面
 
@@ -20,6 +20,17 @@
 传感器：用电量 / 费用 / 运行时长、记忆温度、定时计划、故障与设备信息。
 
 ![传感器](docs/images/panel-sensors.png)
+
+## 自带空调卡片（开箱即用）
+
+集成附带 `custom:panasonic-climate-card`，安装并重启 HA 后无需任何额外配置：
+
+- 卡片 JS 与 `panasonic:nanoe` 图标集由集成注册静态路径并注入前端，**不用复制 `/config/www`、不用 `lovelace.resources`、不用手动加缓存版本号**。
+- UI 仪表盘：添加卡片 → 搜索「松下 CS-ZY35K410 空调」；YAML 仪表盘：写一行 `type: custom:panasonic-climate-card` 即可。
+- **不写死任何 entity_id**：集成在 climate 实体的 `panasonic_entities` 属性里发布「功能 key → entity_id」映射（按 config entry 隔离），卡片按 key 解析开关、传感器与按钮。用户在松下 App 里怎么命名、装几台都不影响。
+- **多台同型号**：卡片自动列出所有本集成的 climate 实体，顶部出现设备下拉框可切换；也可用 `entity:` 固定其中一台。
+- 可选配置：`name`、`step`、`temp_entity`、`show_charts`、`nanoe_logo`；`switches` / `cost_main` / `cost_extra` 可用带 `id` 的数组覆盖，指向任意 HA 实体。
+- 若以前手动注册过 `/local/panasonic-climate-card.js`，请删除那条资源并强制刷新浏览器，避免旧版抢占元素注册。
 
 ## 功能
 
@@ -71,6 +82,12 @@
 - **回风温度**：本机 `inhaleTemperature` 恒为哨兵值 `128`，没有真实回风温度可报
 - **滤网需更换**：`filterReset` 在协议里是一次性复位指令而非状态位，本机 `airconType=0` 也不会触发 App 的滤网提醒
 - **上下 / 左右扫风位置**：与空调卡的两个摆动下拉写同一对字段，属重复入口，保留作备用
+
+### 实体 ID 命名与多设备
+
+全新安装时实体 ID 统一为 `ZY35K410_<功能 key>`（如 `climate.zy35k410`、`switch.zy35k410_nanoe`、`sensor.zy35k410_cost_today`），由 `suggested_object_id` 生成，**与松下 App 里的设备名无关**；显示名称仍沿用 App 名称。第二台同型号空调由 HA 自动加数字后缀（如 `switch.zy35k410_nanoe_2`）。
+
+> **升级不会改名**：已存在的实体注册项保留原 `entity_id`，升级到 2.7.0 不会改变任何自动化或历史。只有删除集成条目后重新添加（全新安装）才会生成新命名。卡片通过 `panasonic_entities` 映射工作，两种命名都能用。
 
 ## 实体图标
 
@@ -133,7 +150,7 @@ MDI 共 7447 个图标，**没有 `nanoe`**（连别名与标签都没有），�
 
 > 目录名必须是 `panasonic_smart_china_zy`（与 `manifest.json` 的 `domain` 一致），改名会导致集成加载失败。
 
-安装完成后，集成名称与图标全部为本地资源，不依赖在线 CDN：`brand/icon.png`（512×512，集成列表方图）、`brand/logo.png`（1024×384，详情页横幅）、`brand/nanoe.svg` + `brand/nanoe.png`（纳诺怡标记原图，仅供参考）、`frontend/panasonic_icons.js`（实际使用的图标集），根目录同名文件用于兼容 2024.11 之前的 HA。
+安装完成后，集成名称与图标全部为本地资源，不依赖在线 CDN：`brand/icon.png`（512×512，集成列表方图）、`brand/logo.png`（1024×384，详情页横幅）、`brand/nanoe.svg` + `brand/nanoe.png`（纳诺怡标记原图，仅供参考）、`frontend/panasonic_icons.js`（图标集）、`frontend/panasonic-climate-card.js`（自带空调卡片），根目录同名文件用于兼容 2024.11 之前的 HA。
 
 ## 配置
 

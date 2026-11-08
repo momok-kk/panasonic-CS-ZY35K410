@@ -11,7 +11,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import async_run_command
 from .const import DOMAIN, icon_for
-from .helpers import as_int, capability_ok, device_info, resolve_key
+from .helpers import ZY35K410Entity, as_int, capability_ok, device_info, resolve_key
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -32,7 +32,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(entities)
 
 
-class PanasonicRemoteSwitch(CoordinatorEntity, SwitchEntity):
+class PanasonicRemoteSwitch(ZY35K410Entity, CoordinatorEntity, SwitchEntity):
     """A 0/1 feature toggle gated by the official *Ex capability flag."""
 
     _attr_device_class = SwitchDeviceClass.SWITCH
@@ -85,7 +85,7 @@ class PanasonicRemoteSwitch(CoordinatorEntity, SwitchEntity):
         await self._set(self._off_value)
 
 
-class PanasonicTimerSwitch(CoordinatorEntity, SwitchEntity):
+class PanasonicTimerSwitch(ZY35K410Entity, CoordinatorEntity, SwitchEntity):
     """Master enable/disable for the weekly timer (its own cloud endpoint)."""
 
     _attr_device_class = SwitchDeviceClass.SWITCH

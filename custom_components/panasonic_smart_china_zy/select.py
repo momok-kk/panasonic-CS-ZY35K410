@@ -7,7 +7,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import async_run_command
 from .const import DOMAIN, icon_for
-from .helpers import as_int, capability_ok, device_info, resolve_key
+from .helpers import ZY35K410Entity, as_int, capability_ok, device_info, resolve_key
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -23,7 +23,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(entities)
 
 
-class PanasonicRemoteSelect(CoordinatorEntity, SelectEntity):
+class PanasonicRemoteSelect(ZY35K410Entity, CoordinatorEntity, SelectEntity):
     """A labelled status field with a label -> protocol value map."""
 
     def __init__(self, coordinator, device, entry, description):

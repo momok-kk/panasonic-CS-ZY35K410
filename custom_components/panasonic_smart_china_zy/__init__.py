@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -17,10 +18,53 @@ PLATFORMS = [
     "climate", "switch", "select", "button", "sensor", "binary_sensor", "number",
 ]
 
+_COMPONENT_DIR = Path(__file__).parent
+_ICONSET_FILE = str(_COMPONENT_DIR / "frontend" / "panasonic_icons.js")
+_ICONSET_URL = f"/{DOMAIN}/panasonic_icons.js"
+
+
+async def _async_register_iconset(hass: HomeAssistant, domain_data: dict) -> None:
+    """Serve the `panasonic:` icon set and inject it into the frontend.
+
+    MDI has no nanoe glyph, and any non-MDI prefix that is not registered in
+    window.customIcons makes ha-icon fall back to the removed <iron-icon>,
+    which renders as an empty box.  Registering a real icon set makes
+    `panasonic:nanoe` selectable in the icon picker and renderable anywhere.
+
+    The version for the cache buster comes from the loader (already cached, and
+    safe to read off the event loop) rather than from a direct manifest read,
+    which the loop-protection detector flags as a blocking call.
+    """
+    if domain_data.get("iconset_registered"):
+        return
+    domain_data["iconset_registered"] = True
+    if hass.http is None:
+        return
+    try:
+        from homeassistant.components.frontend import add_extra_js_url
+        from homeassistant.components.http import StaticPathConfig
+        from homeassistant.loader import async_get_integration
+
+        version = "0"
+        try:
+            integration = await async_get_integration(hass, DOMAIN)
+            version = integration.version or "0"
+        except Exception:  # noqa: BLE001 - cosmetic cache buster only
+            pass
+
+        await hass.http.async_register_static_paths(
+            [StaticPathConfig(_ICONSET_URL, _ICONSET_FILE, True)]
+        )
+        add_extra_js_url(hass, f"{_ICONSET_URL}?v={version}")
+        _LOGGER.debug("Registered panasonic icon set at %s", _ICONSET_URL)
+    except Exception:  # noqa: BLE001 - cosmetic feature, never block setup
+        _LOGGER.debug("Unable to register the panasonic icon set", exc_info=True)
+
 
 async def async_setup(hass: HomeAssistant, config: dict):
     """Initialise global session cache used by the config flow."""
-    hass.data.setdefault(DOMAIN, {"session": None})
+    domain_data = hass.data.setdefault(DOMAIN, {"session": None})
+    await _async_register_iconset(hass, domain_data)
     return True
 
 

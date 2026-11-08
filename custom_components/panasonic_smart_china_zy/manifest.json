@@ -4,9 +4,10 @@
   "documentation": "https://github.com/609293964/panasonic-CS-ZY35K410",
   "issue_tracker": "https://github.com/609293964/panasonic-CS-ZY35K410/issues",
   "dependencies": [],
+  "after_dependencies": ["frontend"],
   "codeowners": ["@609293964"],
   "requirements": [],
-  "version": "2.6.1",
+  "version": "2.6.2",
   "iot_class": "cloud_polling",
   "config_flow": true
 }

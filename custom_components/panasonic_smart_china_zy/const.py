@@ -240,7 +240,12 @@ HOURLY_ENERGY_SENSOR = {
     "source": "hourly",
     "unit": UnitOfEnergy.KILO_WATT_HOUR,
     "device_class": SensorDeviceClass.ENERGY,
-    "state_class": SensorStateClass.MEASUREMENT,
+    # State is the current clock hour's consumption - an interval delta, not a
+    # running total - so it must not declare a statistics state class.  HA
+    # rejects energy + state_class=measurement at runtime ("impossible
+    # considering device class"), and total/total_increasing would fabricate a
+    # cumulative series out of per-hour values.  Today/month/year totals are
+    # separate sensors and do carry total_increasing.
 }
 
 DEVICE_INFO_SENSOR = {

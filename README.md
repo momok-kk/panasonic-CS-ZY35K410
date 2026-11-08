@@ -103,6 +103,19 @@ MDI 里没有 nanoe 的官方标记，因此按官方 App 资源重绘了一个�
 - 忽略 `entity_picture` 的第三方卡片（Mushroom、button-card 等）回退到 `mdi:molecule`。
 - 原始文件：`brand/nanoe.svg`（矢量）、`brand/nanoe.png`（176×176 透明底），可复制到 `/config/www/` 供自定义卡片使用。
 
+### 可作为图标选择的 `panasonic:nanoe`（2.6.2 起）
+
+MDI 共 7447 个图标，**没有 `nanoe`**（连别名与标签都没有），所以图标选择器里搜到的同名项没有路径，选中后是一片空白——那不是一个可用的 MDI 图标。
+
+集成现在自带一个图标集，把纳诺怡标记注册为 `panasonic:nanoe`：
+
+- 在任意图标选择器里搜索 `nanoe`、`纳诺怡`、`panasonic` 都能列出并正常渲染；
+- 可用于实体图标、卡片、自动化等一切接受 `mdi:` 的位置；
+- 由 `frontend/panasonic_icons.js` 通过 `window.customIcons` 注册，`__init__.py` 注册静态路径并以带版本号的 URL 注入前端，无需手动添加资源；
+- 几何与 `brand/nanoe.svg` 完全一致（44×44 画布、同一偏移），唯一区别是填充跟随主题色（`currentColor`），深色主题下比固定深蓝更清晰。
+
+技术背景：HA 前端对非 MDI 前缀的图标，若 `window.customIcons` 中没有对应图标集，会退回已在现代前端中移除的 `<iron-icon>`，表现即为空白。
+
 ## 安装
 
 ### 方式一：HACS 一键添加（推荐）

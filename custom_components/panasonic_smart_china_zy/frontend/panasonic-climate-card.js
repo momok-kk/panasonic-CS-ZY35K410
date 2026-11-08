@@ -5,6 +5,13 @@
  * HA 前端；无需复制到 /config/www，也无需 lovelace.resources 条目。
  * YAML / UI 仪表盘都只要写 `type: custom:panasonic-climate-card`。
  *
+ * 主题：两套配色自动跟随，不需要用户配置，也没有皮肤选择器。
+ *   浅色 = 霜白（THEME），深色 = 墨夜（DARK_THEME）。
+ *   判定顺序：hass.themes.darkMode → HA 根元素 --primary-background-color
+ *   的亮度 → 浏览器 prefers-color-scheme。HA 推送 hass、切换系统配色或
+ *   修改根元素样式时都会重新渲染，因此浏览器深色模式下 HA 自动切暗，
+ *   卡片会同步切换。
+ *
  * 实体发现（关键）：不写死任何 entity_id。集成在 climate 实体的
  * `panasonic_entities` 属性里发布「功能 key → entity_id」映射（按 config
  * entry 隔离），卡片按 key 解析；同时扫描所有带该属性的 climate 实体实现
@@ -17,7 +24,6 @@
  * 其余行为：温度步进 / 上下限 / 模式 / 风速 / 摆风档位全读 climate 属性；
  *   24h 温度曲线取 recorder 历史；实体缺失即隐藏；传感器无效值显示「—」。
  * 状态位：nanoe_logo 图片 > panasonic:nanoe 图标集 > 内置矢量降级。
- * 外观：霜白一套，变量集中在 THEME。
  */
 
 const MODES = [
@@ -85,6 +91,7 @@ const THEME = {
     sheetShadow: '0 -12px 40px rgba(0,0,0,.10)', powerShadow: '0 2px 10px rgba(0,0,0,.06)',
     lightOn: '#34C759', nanoeOn: '#2C4198', nanoeGlow: 'rgba(44,65,152,.30)', indicatorOff: '#C7C7CC',
     chartTemp: '#0071E3', energy: '#FF9F0A', pinBg: 'rgba(255,255,255,.62)',
+    dotBorder: 'inset 0 0 0 1px rgba(0,0,0,.06)',
   },
   accents: {
     cool: '#0071E3', heat: '#E8791B', dry: '#5B7FB5',
@@ -97,6 +104,38 @@ const THEME = {
     fan_only: 'linear-gradient(180deg,#F2F2F7 0%,#E5E5EA 100%)',
     auto: 'linear-gradient(180deg,#E9F6EF 0%,#D5EDDF 100%)',
     off: 'linear-gradient(180deg,#F5F5F7 0%,#E8E8ED 100%)',
+  },
+};
+
+// 深色外观：与霜白共用全部 CSS 变量，仅换一套值。自动跟随 HA / 系统，
+// 不作为用户可选皮肤暴露。
+const DARK_THEME = {
+  name: '墨夜',
+  v: {
+    card: '#1C1C1E', text: '#F5F5F7', sub: '#A9C4E4', muted: '#98989D',
+    faint: '#8E8E93', inactive: '#A1A1A6', surface: '#2C2C2E', raised: '#3A3A3C',
+    tile: '#2C2C2E', more: '#17324F', label: '#98989D', value: '#F5F5F7',
+    power: '#3A3A3C', placeholder: '#48484A', overlay: 'rgba(0,0,0,.58)',
+    line: '#3A3A3C', sheet: '#232326', radius: '28px', tileRadius: '16px',
+    border: '1px solid rgba(255,255,255,.06)', tileBorder: '1px solid rgba(255,255,255,.05)',
+    activeBorder: '1px solid rgba(255,255,255,.10)', moreBorder: '1px solid rgba(255,255,255,.06)',
+    shadow: '0 12px 40px rgba(0,0,0,.38)', segShadow: '0 2px 6px rgba(0,0,0,.35)',
+    sheetShadow: '0 -12px 40px rgba(0,0,0,.45)', powerShadow: '0 2px 10px rgba(0,0,0,.32)',
+    lightOn: '#30D158', nanoeOn: '#8FA3FF', nanoeGlow: 'rgba(143,163,255,.38)', indicatorOff: '#636366',
+    chartTemp: '#64A5FF', energy: '#FFB340', pinBg: 'rgba(255,255,255,.08)',
+    dotBorder: 'inset 0 0 0 1px rgba(255,255,255,.12)',
+  },
+  accents: {
+    cool: '#5B9BFF', heat: '#FF9C5B', dry: '#8FAEE8',
+    fan_only: '#A1A1A6', auto: '#5BC48D', off: '#8E8E93',
+  },
+  gradients: {
+    cool: 'linear-gradient(180deg,#122743 0%,#1B3A5C 100%)',
+    heat: 'linear-gradient(180deg,#3A2418 0%,#5A3521 100%)',
+    dry: 'linear-gradient(180deg,#1C2740 0%,#2A3654 100%)',
+    fan_only: 'linear-gradient(180deg,#2A2A2C 0%,#38383A 100%)',
+    auto: 'linear-gradient(180deg,#17342A 0%,#234A38 100%)',
+    off: 'linear-gradient(180deg,#232326 0%,#2E2E31 100%)',
   },
 };
 
@@ -145,6 +184,9 @@ class PanasonicClimateCard extends HTMLElement {
     this.attachShadow({ mode: 'open' });
     this._config = null;
     this._climates = [];
+    this._media = null;
+    this._themeObserver = null;
+    this._onSchemeChange = () => this._render();
     this._hass = null;
     this._drawer = false;
     this._panel = null;       // 'fan' | 'swing' | null
@@ -165,12 +207,49 @@ class PanasonicClimateCard extends HTMLElement {
     if (!this._timer) {
       this._timer = setInterval(() => this._loadHistory(true), 5 * 60 * 1000);
     }
+    // Theme changes do not always push a new `hass` object, so listen to the
+    // OS preference and to the root element that HA applies theme vars to.
+    if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+      this._media = window.matchMedia('(prefers-color-scheme: dark)');
+      if (this._media.addEventListener) {
+        this._media.addEventListener('change', this._onSchemeChange);
+      } else if (this._media.addListener) {
+        this._media.addListener(this._onSchemeChange);
+      }
+    }
+    if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined'
+        && document.documentElement) {
+      let last = this._isDark();
+      this._themeObserver = new MutationObserver(() => {
+        const now = this._isDark();
+        if (now !== last) {
+          last = now;
+          this._render();
+        }
+      });
+      this._themeObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['style', 'class', 'data-theme'],
+      });
+    }
   }
 
   disconnectedCallback() {
     if (this._timer) clearInterval(this._timer);
     this._timer = null;
     this._clearSwingPendingTimer();
+    if (this._media) {
+      if (this._media.removeEventListener) {
+        this._media.removeEventListener('change', this._onSchemeChange);
+      } else if (this._media.removeListener) {
+        this._media.removeListener(this._onSchemeChange);
+      }
+      this._media = null;
+    }
+    if (this._themeObserver) {
+      this._themeObserver.disconnect();
+      this._themeObserver = null;
+    }
   }
 
   setConfig(config) {
@@ -198,6 +277,54 @@ class PanasonicClimateCard extends HTMLElement {
 
   _state(id) {
     return id && this._hass && this._hass.states ? this._hass.states[id] : undefined;
+  }
+
+  // 深色判定：优先 HA 明确的 darkMode，其次由 HA 已应用的背景色亮度推断，
+  // 最后回退到浏览器 prefers-color-scheme（预览/测试环境也能工作）。
+  _colorLuminance(value) {
+    const color = String(value || '').trim();
+    if (!color) return null;
+    let r;
+    let g;
+    let b;
+    if (color[0] === '#') {
+      const hex = color.slice(1);
+      if (hex.length === 3) {
+        r = parseInt(hex[0] + hex[0], 16);
+        g = parseInt(hex[1] + hex[1], 16);
+        b = parseInt(hex[2] + hex[2], 16);
+      } else if (hex.length === 6) {
+        r = parseInt(hex.slice(0, 2), 16);
+        g = parseInt(hex.slice(2, 4), 16);
+        b = parseInt(hex.slice(4, 6), 16);
+      } else {
+        return null;
+      }
+    } else {
+      const nums = color.match(/[\d.]+/g);
+      if (!nums || nums.length < 3) return null;
+      [r, g, b] = nums.slice(0, 3).map(Number);
+    }
+    if (![r, g, b].every(Number.isFinite)) return null;
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  }
+
+  _isDark() {
+    const themes = this._hass && this._hass.themes;
+    if (themes && typeof themes.darkMode === 'boolean') return themes.darkMode;
+    try {
+      if (typeof document !== 'undefined' && document.documentElement) {
+        const bg = getComputedStyle(document.documentElement)
+          .getPropertyValue('--primary-background-color');
+        const lum = this._colorLuminance(bg);
+        if (lum !== null) return lum < 0.5;
+      }
+    } catch (err) {
+      // Preview / test hosts may not expose a document.
+    }
+    return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-color-scheme: dark)').matches
+      : false;
   }
 
   // 集成在 climate 实体上发布的「key → entity_id」映射，按设备隔离。
@@ -574,7 +701,7 @@ class PanasonicClimateCard extends HTMLElement {
     const st = this._state(cfg.entity);
     const root = this.shadowRoot;
 
-    const theme = THEME;
+    const theme = this._isDark() ? DARK_THEME : THEME;
 
     if (!st) {
       const hint = this._climates && this._climates.length
@@ -878,7 +1005,7 @@ class PanasonicClimateCard extends HTMLElement {
       .pin.nanoe ha-icon { --mdc-icon-size: 30px; width: 30px; height: 30px;
                            display: inline-flex; color: inherit; }
       .pin.nanoe.on .pin-icon { filter: drop-shadow(0 0 5px var(--pc-nanoe-glow)); }
-      .pin.off .dot { box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); }
+      .pin.off .dot { box-shadow: var(--pc-dot-border); }
       .pin.off .pin-icon img { filter: grayscale(1); opacity: .7; }
 
       .body { padding: 26px; display: flex; flex-direction: column; gap: 16px; }
@@ -981,7 +1108,7 @@ if (!window.customCards.some((card) => card.type === 'panasonic-climate-card')) 
   window.customCards.push({
     type: 'panasonic-climate-card',
     name: '松下 CS-ZY35K410 空调',
-    description: '集成自带，开箱即用：自动发现实体，支持多台同型号空调；霜白主题、24h 温度曲线与费用读数',
+    description: '集成自带，开箱即用：自动发现实体、多台同型号空调、深浅色自动跟随、24h 温度曲线与费用读数',
     preview: true,
   });
 }

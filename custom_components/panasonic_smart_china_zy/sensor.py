@@ -64,6 +64,9 @@ class _BaseSensor(CoordinatorEntity, SensorEntity):
         self._attr_native_unit_of_measurement = description.get("unit")
         self._attr_device_class = description.get("device_class")
         self._attr_state_class = description.get("state_class")
+        self._attr_suggested_display_precision = description.get(
+            "suggested_display_precision"
+        )
         self._attr_icon = icon_for("sensor", description["key"])
         self._attr_entity_registry_enabled_default = description.get(
             "enabled_default", True
@@ -261,10 +264,23 @@ class PanasonicTimerSensor(_BaseSensor):
         for index, day in enumerate(week_list):
             if not isinstance(day, dict):
                 continue
+            # Use the explicit week number instead of the array position.
+            # AirconCommon's weekList carries "week": 1..7; the App's Chinese
+            # week starts on Monday, i.e. ISO 1=Monday ... 7=Sunday, matching
+            # TIMER_WEEK_NAMES and dt_util.now().isoweekday().  The raw value
+            # and its source stay in the attributes so this encoding can be
+            # checked against a real schedule if the cloud ever changes it.
+            week_raw = as_int(day.get("week"))
+            if week_raw is not None and 1 <= week_raw <= 7:
+                week_index = week_raw - 1
+                week_source = "week_field"
+            else:
+                week_index = index
+                week_source = "list_index"
             week_label = (
-                TIMER_WEEK_NAMES[index]
-                if index < len(TIMER_WEEK_NAMES)
-                else str(day.get("week", index + 1))
+                TIMER_WEEK_NAMES[week_index]
+                if week_index < len(TIMER_WEEK_NAMES)
+                else str(week_raw if week_raw is not None else index + 1)
             )
             for raw in day.get("timerList") or []:
                 if not isinstance(raw, dict):
@@ -273,9 +289,11 @@ class PanasonicTimerSensor(_BaseSensor):
                 if minutes is None or minutes < 0:
                     continue
                 items.append({
-                    "week": day.get("week", index + 1),
+                    "week": week_raw if week_raw is not None else index + 1,
+                    "week_raw": week_raw,
+                    "week_source": week_source,
                     "week_label": week_label,
-                    "week_index": index,
+                    "week_index": week_index,
                     "time": f"{minutes // 60:02d}:{minutes % 60:02d}",
                     "minute_of_day": minutes,
                     "action": TIMER_ACTIONS.get(
@@ -314,7 +332,8 @@ class PanasonicTimerSensor(_BaseSensor):
         )
 
         now = dt_util.now()
-        today = now.weekday()
+        # week_index is 0=Monday, matching the ISO week numbers in weekList.
+        today = now.isoweekday() - 1
         now_minutes = now.hour * 60 + now.minute
         next_item = None
         for offset in range(8):

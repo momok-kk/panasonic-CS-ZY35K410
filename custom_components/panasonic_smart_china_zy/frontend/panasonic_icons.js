@@ -24,16 +24,39 @@
     },
   };
 
-  window.customIcons = window.customIcons || {};
-  window.customIcons.panasonic = {
-    getIcon: async (name) => {
-      const icon = ICONS[name];
-      return icon ? { path: icon.path, viewBox: icon.viewBox } : undefined;
-    },
-    getIconList: async () =>
-      Object.keys(ICONS).map((name) => ({
-        name,
-        keywords: ICONS[name].keywords,
-      })),
+  const ours = Object.keys(ICONS).map((name) => ({
+    name,
+    keywords: ICONS[name].keywords,
+  }));
+  const ownIcon = async (name) => {
+    const icon = ICONS[name];
+    return icon ? { path: icon.path, viewBox: icon.viewBox } : undefined;
   };
+
+  window.customIcons = window.customIcons || {};
+  // Merge instead of overwriting: another integration, or a future HA
+  // release, may already own the "panasonic" prefix.  Our glyph wins, all
+  // other names still resolve through the previous implementation.
+  const previous = window.customIcons.panasonic;
+  if (previous && typeof previous.getIcon === "function") {
+    const previousGetIcon = previous.getIcon.bind(previous);
+    const previousGetIconList = previous.getIconList
+      ? previous.getIconList.bind(previous)
+      : null;
+    window.customIcons.panasonic = Object.assign({}, previous, {
+      getIcon: async (name) => (await ownIcon(name)) || previousGetIcon(name),
+      getIconList: async () => {
+        const others = previousGetIconList ? await previousGetIconList() : [];
+        return [
+          ...others.filter((icon) => !ICONS[icon.name]),
+          ...ours,
+        ];
+      },
+    });
+  } else {
+    window.customIcons.panasonic = {
+      getIcon: ownIcon,
+      getIconList: async () => ours,
+    };
+  }
 })();

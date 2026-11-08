@@ -126,11 +126,8 @@ class PanasonicTimerSwitch(CoordinatorEntity, SwitchEntity):
             self._device.set_fix_time_status(value == self._description["on"]),
             "定时开关",
         )
-        data = dict(self.coordinator.data or {})
-        section = dict(data.get(self._description["source"]) or {})
-        section[self._description["field"]] = value
-        data[self._description["source"]] = section
-        self.coordinator.async_set_updated_data(data)
+        # The device schedules a coalesced read-back of the aux coordinator;
+        # no manual optimistic edit of its cached data is needed any more.
 
     async def async_turn_on(self, **kwargs):
         await self._set(self._description["on"])

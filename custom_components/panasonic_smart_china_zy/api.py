@@ -9,6 +9,7 @@ import async_timeout
 
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.event import async_call_later
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -46,6 +47,10 @@ from .const import (
 from .helpers import as_int, business_error_code, error_message
 
 _LOGGER = logging.getLogger(__name__)
+
+# After a successful write the optimistically updated state is verified by a
+# short read-back.  Bursts of writes are coalesced into one request.
+VERIFY_REFRESH_DELAY = 2.0
 
 # Date parameters must follow the timezone configured in Home Assistant, not
 # the container clock (which is often UTC).  The cloud reports Beijing time.
@@ -140,6 +145,9 @@ class PanasonicSmartDevice:
         self.url_set = URL_SET
         self.last_params = {}
         self._coordinator = None
+        self._aux_coordinator = None
+        self._verify_unsub = {}
+        self.firmware_version = None
         # Set from the live setTemperature value; shared with temperature sensors.
         self.detected_temp_scale = None
         self._device_meta = {}
@@ -147,24 +155,50 @@ class PanasonicSmartDevice:
         self._device_meta_fetched = False
         self._read_error_logged = False
 
-    def attach_coordinator(self, coordinator):
-        """Bind the shared status coordinator for push updates."""
-        self._coordinator = coordinator
+    def attach_coordinator(self, status, aux=None):
+        """Bind the shared status/aux coordinators for push updates."""
+        self._coordinator = status
+        self._aux_coordinator = aux
+
+    def cancel_pending_refreshes(self):
+        """Cancel delayed read-backs when the config entry is unloaded."""
+        for cancel in self._verify_unsub.values():
+            cancel()
+        self._verify_unsub.clear()
 
     def request_reauth(self):
         """Start the reauth flow when a write reports an expired session.
 
-        Older HA releases expose this on the entry, newer ones may move it;
-        the status coordinator still triggers reauth on its next poll, so a
-        missing helper must never break the service call.
+        The helper was renamed to async_start_reauth_if_available in newer HA
+        releases; a missing one only means the status coordinator will start
+        reauth on its next poll, so it must never break the service call.
         """
         if self.entry is None:
             return
-        starter = getattr(self.entry, "async_start_reauth", None)
+        starter = (
+            getattr(self.entry, "async_start_reauth_if_available", None)
+            or getattr(self.entry, "async_start_reauth", None)
+        )
         if callable(starter):
             starter(self.hass)
         else:
             _LOGGER.debug("Reauth will be triggered by the next status poll")
+
+    def _schedule_verify_refresh(self, key, coordinator):
+        """Verify an optimistic write with one coalesced, delayed read-back."""
+        if coordinator is None:
+            return
+        cancel = self._verify_unsub.pop(key, None)
+        if cancel:
+            cancel()
+
+        def _refresh(_now):
+            self._verify_unsub.pop(key, None)
+            self.hass.async_create_task(coordinator.async_request_refresh())
+
+        self._verify_unsub[key] = async_call_later(
+            self.hass, VERIFY_REFRESH_DELAY, _refresh
+        )
 
     def _log_read_failure(self, message, *args):
         """Warn once per failure streak, then fall back to debug to avoid spam."""
@@ -383,6 +417,7 @@ class PanasonicSmartDevice:
             self._device_meta = meta
             self._device_meta_ts = now
             self._device_meta_fetched = True
+            self.firmware_version = meta.get("version")
         return meta
 
     async def set_charge(self, value):
@@ -394,7 +429,9 @@ class PanasonicSmartDevice:
             "token": self.token,
             "params": {"charge": round(float(value), 2)},
         }
-        return await self._post(f"{URL_BASE}/{ENDPOINT_CHARGE_SET}", payload)
+        result = await self._post(f"{URL_BASE}/{ENDPOINT_CHARGE_SET}", payload)
+        self._schedule_verify_refresh("aux", self._aux_coordinator)
+        return result
 
     async def set_fix_time_status(self, enabled):
         """Enable or disable the device's weekly timer feature.
@@ -410,7 +447,9 @@ class PanasonicSmartDevice:
             "token": self.token,
             "params": {"fixTimeStatus": 1 if enabled else 0},
         }
-        return await self._post(f"{URL_BASE}/{ENDPOINT_FIX_STATUS_SET}", payload)
+        result = await self._post(f"{URL_BASE}/{ENDPOINT_FIX_STATUS_SET}", payload)
+        self._schedule_verify_refresh("aux", self._aux_coordinator)
+        return result
 
     async def send_command(self, changes):
         """Push only the changed fields to the cloud.
@@ -432,7 +471,9 @@ class PanasonicSmartDevice:
                 "params": params,
             },
         )
-        return self._apply_optimistic(changes)
+        updated = self._apply_optimistic(changes)
+        self._schedule_verify_refresh("status", self._coordinator)
+        return updated
 
     def _apply_optimistic(self, changes):
         """Reflect a successful command immediately, then let polling verify."""

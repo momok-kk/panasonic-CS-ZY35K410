@@ -144,8 +144,12 @@ AUX_SENSORS = [
     {
         "key": "cost_today", "name": "今日费用", "field": "costToday",
         "source": "electricity_today", "unit": "CNY",
-        "device_class": SensorDeviceClass.MONETARY,
-        "state_class": SensorStateClass.TOTAL,
+        # HA only allows state_class=TOTAL with device_class=MONETARY, which
+        # records a negative delta whenever a daily/monthly/yearly counter
+        # resets.  Dropping the device class lets us use TOTAL_INCREASING so
+        # the reset is handled as a new meter cycle.
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "suggested_display_precision": 2,
     },
     {
         "key": "energy_month", "name": "本月用电量",
@@ -172,8 +176,12 @@ AUX_SENSORS = [
     {
         "key": "cost_month", "name": "本月费用", "field": "costSelectMonth",
         "source": "electricity_month", "unit": "CNY",
-        "device_class": SensorDeviceClass.MONETARY,
-        "state_class": SensorStateClass.TOTAL,
+        # HA only allows state_class=TOTAL with device_class=MONETARY, which
+        # records a negative delta whenever a daily/monthly/yearly counter
+        # resets.  Dropping the device class lets us use TOTAL_INCREASING so
+        # the reset is handled as a new meter cycle.
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "suggested_display_precision": 2,
         "sum_array": True,
     },
     {
@@ -186,8 +194,12 @@ AUX_SENSORS = [
     {
         "key": "cost_year", "name": "本年费用", "field": "cost",
         "source": "electricity_year", "unit": "CNY",
-        "device_class": SensorDeviceClass.MONETARY,
-        "state_class": SensorStateClass.TOTAL,
+        # HA only allows state_class=TOTAL with device_class=MONETARY, which
+        # records a negative delta whenever a daily/monthly/yearly counter
+        # resets.  Dropping the device class lets us use TOTAL_INCREASING so
+        # the reset is handled as a new meter cycle.
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "suggested_display_precision": 2,
         "sum_array": True,
     },
     {

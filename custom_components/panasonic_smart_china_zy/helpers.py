@@ -12,6 +12,8 @@ def device_info(device, name):
         name=name,
         manufacturer="Panasonic",
         model=device.model,
+        sw_version=getattr(device, "firmware_version", None),
+        configuration_url="https://app.psmartcloud.com/ca/cn/0900/AirconCommon/",
     )
 
 

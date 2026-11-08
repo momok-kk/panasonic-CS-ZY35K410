@@ -84,7 +84,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     device = PanasonicSmartDevice(hass, entry.data, entry.title, entry)
     status = PanasonicStatusCoordinator(hass, device, entry)
     aux = PanasonicAuxCoordinator(hass, device, entry)
-    device.attach_coordinator(status)
+    device.attach_coordinator(status, aux)
 
     # async_refresh() (not async_config_entry_first_refresh) keeps the entry
     # loadable while the session is expired: entities show as unavailable and
@@ -112,5 +112,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Unload platforms and drop the shared runtime."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
+        runtime = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None) or {}
+        device = runtime.get("device")
+        if device is not None:
+            device.cancel_pending_refreshes()
     return unload_ok

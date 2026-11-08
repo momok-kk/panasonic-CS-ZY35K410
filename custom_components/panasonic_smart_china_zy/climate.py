@@ -8,6 +8,7 @@ from homeassistant.components.climate import ClimateEntity
 from homeassistant.components.climate.const import (
     ClimateEntityFeature,
     FAN_AUTO,
+    HVACAction,
     HVACMode,
 )
 from homeassistant.const import (
@@ -106,6 +107,10 @@ class PanasonicACEntity(CoordinatorEntity, ClimateEntity):
 
     @property
     def supported_features(self):
+        # HA's own climate example keeps HVACMode.OFF in hvac_modes while also
+        # declaring TURN_ON/TURN_OFF.  Removing OFF would make the state
+        # unable to express "powered down"; removing the two features would
+        # make HA reject climate.turn_on / climate.turn_off service calls.
         features = (
             ClimateEntityFeature.TARGET_TEMPERATURE
             | ClimateEntityFeature.TURN_ON
@@ -144,6 +149,15 @@ class PanasonicACEntity(CoordinatorEntity, ClimateEntity):
         if not self._is_on:
             return HVACMode.OFF
         return self._hvac_mode
+
+    @property
+    def hvac_action(self):
+        """Be honest: OFF when powered down, otherwise unknown.
+
+        The status bean has no compressor/defrost flag, so guessing COOLING
+        would be misleading; the mode itself is already in hvac_mode.
+        """
+        return HVACAction.OFF if not self._is_on else None
 
     @property
     def fan_modes(self):

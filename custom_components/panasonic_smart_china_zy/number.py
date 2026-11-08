@@ -64,4 +64,4 @@ class PanasonicChargeNumber(CoordinatorEntity, NumberEntity):
             self._device.set_charge(value),
             "设置电价",
         )
-        await self.coordinator.async_request_refresh()
+        # The device schedules a coalesced read-back of the aux coordinator.
